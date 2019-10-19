@@ -319,20 +319,22 @@ class OrderManager:
     # Orders
     ###
 
-    def calc_first_trade_price(self, avg_entry_price, trade_count):
-        factor = avg_entry_price*trade_count
-        suma = 0
+    def calc_first_trade_price(self, avg_entry_price, qty):
+        trade_count = floor(qty/settings.ORDER_START_SIZE)
+        incomplete_trade_qty = qty % settings.ORDER_START_SIZE
+       
+        suma = incomplete_trade_qty*pow(1+settings.INTERVAL, trade_count)
 
         for x in range(trade_count):
-            suma += pow(1+settings.INTERVAL, x)
+            suma += settings.ORDER_START_SIZE*pow(1+settings.INTERVAL, x)
 
-        return factor / suma
+        return avg_entry_price*(trade_count*settings.ORDER_START_SIZE+incomplete_trade_qty) / suma
 
     def get_trade_price(self, first_trade_price, trade_number):
         return first_trade_price*pow(1+settings.INTERVAL, trade_number)
 	
     def get_trade_qty(self, last_trade_price, target_price):
-        return max(settings.ORDER_START_SIZE, floor((((target_price-last_trade_price)/last_trade_price)/settings.INTERVAL))*settings.ORDER_START_SIZE)
+        return max(settings.ORDER_START_SIZE, floor((target_price/last_trade_price-1)/settings.INTERVAL)*settings.ORDER_START_SIZE)
 
     def place_orders(self):
         """Create order items for use in convergence."""
@@ -359,41 +361,65 @@ class OrderManager:
             
             if position['currentQty'] < 0:
                 avg_entry_price = math.toNearestFloor(position['avgEntryPrice'], self.instrument['tickSize'])
-                logger.info("avg entry price %s" % (position['avgEntryPrice']))
-                first_trade_price = self.calc_first_trade_price(position['avgEntryPrice'], trade_count)
+                
+                first_trade_price = self.calc_first_trade_price(position['avgEntryPrice'], current_qty)
                 last_trade_price = self.get_trade_price(first_trade_price, trade_count-1)
+                next_trade_price = self.get_trade_price(first_trade_price, trade_count)
                 
                 logger.info("first trade price %s" % (first_trade_price))
                 logger.info("last trade price %s" % (last_trade_price))
+                logger.info("next trade price %s" % (next_trade_price))
                 
-                buy_quantity = 0
+
                 buy_price = top_buy_price
+                buy_quantity = 0
+
+                buy_price2 = top_buy_price
+                buy_quantity2 = 0
 
                 if trade_count > 1:
                     buy_quantity = current_qty % settings.ORDER_START_SIZE
                     buy_price = min(top_buy_price, math.toNearestFloor(last_trade_price, self.instrument['tickSize']))
 
                     if buy_quantity == 0:
-                        buy_quantity = settings.ORDER_START_SIZE
+                        n=trade_count
                     else:
-                        previous_trade_price = self.get_trade_price(first_trade_price, trade_count-2)
+                        n=trade_count-1
+                    
+                    for x in range(n-1,-1,-1):
+                        previous_trade_price = self.get_trade_price(first_trade_price, x)
 
                         if previous_trade_price >= buy_price:
                             buy_quantity += settings.ORDER_START_SIZE
+                        elif buy_quantity < settings.ORDER_START_SIZE:
+                            buy_price2 = math.toNearestFloor(previous_trade_price, self.instrument['tickSize'])
+                            buy_quantity2 = settings.ORDER_START_SIZE
+                            buy_orders.append({'price': buy_price2, 'orderQty': buy_quantity2, 'side': "Buy"})
+                            break
+                        else:
+                            break
 
                     buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy"})
-
-                sell_quantity=0
                 
                 if self.instrument['makerFee'] < 0:
-                    sell_price = math.toNearestCeil(max(top_sell_price, self.get_trade_price(first_trade_price, trade_count)), self.instrument['tickSize'])
-                    sell_quantity = self.get_trade_qty(last_trade_price, sell_price)
+                    sell_price = math.toNearestCeil(max(top_sell_price, next_trade_price), self.instrument['tickSize'])
+                    sell_quantity = 0
+
+                    next_price = next_trade_price
+
+                    while next_price <= sell_price:
+                        sell_quantity += settings.ORDER_START_SIZE
+                        next_price *= 1+settings.INTERVAL
 
                     if sell_quantity > 0:
                         sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell"})
 
-                if current_qty > buy_quantity:
-                    buy_orders.append({'price': min(top_buy_price, math.toNearestFloor((position['avgEntryPrice']*current_qty-buy_price*buy_quantity)/(current_qty-buy_quantity), self.instrument['tickSize'])), 'orderQty': abs(position['currentQty'])-buy_quantity, 'side': "Buy"})
+                if current_qty > (buy_quantity+buy_quantity2):
+                    break_even_price = (position['avgEntryPrice']*current_qty-buy_price*buy_quantity-buy_price2*buy_quantity2)/(current_qty-buy_quantity-buy_quantity2)
+                    buy_price3 = min(top_buy_price, math.toNearestFloor(break_even_price, self.instrument['tickSize']))
+                    buy_quantity3 = current_qty - buy_quantity - buy_quantity2
+                    
+                    buy_orders.append({'price': buy_price3, 'orderQty': buy_quantity3, 'side': "Buy"})
 
             if position['currentQty']>0:
                 avg_entry_price = math.toNearestCeil(position['avgEntryPrice'], self.instrument['tickSize'])
