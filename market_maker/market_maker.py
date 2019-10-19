@@ -342,14 +342,14 @@ class OrderManager:
         buy_orders = []
         sell_orders = []
 
-        buy_price = ticker["buy"] + self.instrument['tickSize']
-        sell_price = ticker["sell"] - self.instrument['tickSize']
+        top_buy_price = ticker["buy"] + self.instrument['tickSize']
+        top_sell_price = ticker["sell"] - self.instrument['tickSize']
 
-        if buy_price >= ticker["sell"]:
-            buy_price = ticker["buy"]
+        if top_buy_price >= ticker["sell"]:
+            top_buy_price = ticker["buy"]
         
-        if sell_price <= ticker["buy"]:
-            sell_price = ticker["sell"]
+        if top_sell_price <= ticker["buy"]:
+            top_sell_price = ticker["sell"]
 
         if position['currentQty'] != 0:
             current_qty = abs(position['currentQty'])
@@ -367,38 +367,34 @@ class OrderManager:
                 logger.info("last trade price %s" % (last_trade_price))
                 
                 buy_quantity = 0
+                buy_price = top_buy_price
 
                 if trade_count > 1:
                     buy_quantity = current_qty % settings.ORDER_START_SIZE
+                    buy_price = min(top_buy_price, math.toNearestFloor(last_trade_price, self.instrument['tickSize']))
 
                     if buy_quantity == 0:
                         buy_quantity = settings.ORDER_START_SIZE
 
-                    buy_orders.append({'price': min(buy_price, math.toNearestFloor(last_trade_price, self.instrument['tickSize'])), 'orderQty': buy_quantity, 'side': "Buy"})
+                    buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy"})
 
                 sell_quantity=0
                 
                 if self.instrument['makerFee'] < 0:
-#                     if buy_quantity > 0 and buy_quantity < settings.ORDER_START_SIZE:
-#                         sell_price = max(sell_price, self.get_trade_price(first_trade_price, trade_count-1))
-#                         sell_quantity = settings.ORDER_START_SIZE-buy_quantity
-#                     else:
-                    sell_price = max(sell_price, self.get_trade_price(first_trade_price, trade_count))
-#                         sell_quantity = settings.ORDER_START_SIZE
-                    
-                    sell_quantity = ceil(self.get_trade_qty(last_trade_price, sell_price))
+                    sell_price = math.toNearestCeil(max(top_sell_price, self.get_trade_price(first_trade_price, trade_count)), self.instrument['tickSize'])
+                    sell_quantity = self.get_trade_qty(last_trade_price, sell_price)
 
                     if sell_quantity > 0:
-                        sell_orders.append({'price': math.toNearestCeil(sell_price, self.instrument['tickSize']), 'orderQty': sell_quantity, 'side': "Sell"})
-                
+                        sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell"})
+
                 if current_qty > buy_quantity:
-                    buy_orders.append({'price': min(buy_price, math.toNearestFloor((position['avgEntryPrice']*current_qty-buy_price*buy_quantity)/(current_qty-buy_quantity), self.instrument['tickSize'])), 'orderQty': abs(position['currentQty'])-buy_quantity, 'side': "Buy"})
+                    buy_orders.append({'price': min(top_buy_price, math.toNearestFloor((position['avgEntryPrice']*current_qty-buy_price*buy_quantity)/(current_qty-buy_quantity), self.instrument['tickSize'])), 'orderQty': abs(position['currentQty'])-buy_quantity, 'side': "Buy"})
 
             if position['currentQty']>0:
                 avg_entry_price = math.toNearestCeil(position['avgEntryPrice'], self.instrument['tickSize'])
-                sell_orders.append({'price': max(sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell"})
+                sell_orders.append({'price': max(top_sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell"})
         elif self.instrument['makerFee'] < 0:
-            sell_orders.append({'price': sell_price, 'orderQty': settings.ORDER_START_SIZE, 'side': "Sell"})
+            sell_orders.append({'price': top_sell_price, 'orderQty': settings.ORDER_START_SIZE, 'side': "Sell"})
 
         return self.converge_orders(buy_orders, sell_orders)
 
