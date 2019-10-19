@@ -375,6 +375,11 @@ class OrderManager:
 
                     if buy_quantity == 0:
                         buy_quantity = settings.ORDER_START_SIZE
+                    else:
+                        previous_trade_price = self.get_trade_price(first_trade_price, trade_count-2)
+
+                        if previous_trade_price >= buy_price:
+                            buy_quantity += settings.ORDER_START_SIZE
 
                     buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy"})
 
