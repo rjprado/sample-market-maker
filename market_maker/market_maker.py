@@ -265,12 +265,12 @@ class OrderManager:
         trade_count = floor(qty/settings.ORDER_START_SIZE)
         incomplete_trade_qty = qty % settings.ORDER_START_SIZE
        
-        suma = incomplete_trade_qty*pow(1+settings.INTERVAL, trade_count)
+        suma = incomplete_trade_qty/pow(1+settings.INTERVAL, trade_count)
 
         for x in range(trade_count):
-            suma += settings.ORDER_START_SIZE*pow(1+settings.INTERVAL, x)
+            suma += settings.ORDER_START_SIZE/pow(1+settings.INTERVAL, x)
 
-        return break_even_price*(trade_count*settings.ORDER_START_SIZE+incomplete_trade_qty) / suma
+        return break_even_price*suma/(trade_count*settings.ORDER_START_SIZE+incomplete_trade_qty)
 
     def get_trade_price(self, first_trade_price, trade_number):
         return first_trade_price*pow(1+settings.INTERVAL, trade_number)
