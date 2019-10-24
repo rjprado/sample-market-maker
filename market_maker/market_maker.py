@@ -322,25 +322,34 @@ class OrderManager:
                 logger.info("last trade price %s" % (last_trade_price))
                 logger.info("next trade price %s" % (next_trade_price))
                 
-                if self.instrument['makerFee'] < 0 and self.instrument['fundingRate'] >= 0:
+                if self.instrument['makerFee'] < 0 and self.start_XBt > 0:
                     sell_quantity = -(current_qty % settings.ORDER_START_SIZE)
 
-                    next_price = next_trade_price
+                    total_sell_quantity = current_qty
+                    next_price = last_trade_price
+                    order_count = 0
 
-                    while next_price <= top_sell_price or sell_quantity < current_qty:
-                        sell_quantity += settings.ORDER_START_SIZE
-                        next_price *= 1+settings.INTERVAL
-                        
-                    next_price = next_price/(1+settings.INTERVAL)
+                    while order_count < 10:
+                        while True:
+                            sell_quantity += settings.ORDER_START_SIZE
+                            next_price *= 1+settings.INTERVAL
 
-                    sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
+                            if next_price >= top_sell_price and sell_quantity >= total_sell_quantity:
+                                break;
 
-                    new_leverage = ((current_qty+sell_quantity)/self.instrument['markPrice'])/XBt_to_XBT(self.start_XBt)
+                        sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
 
-                    logger.info("New Leverage %s" % (new_leverage))   
+                        new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/XBt_to_XBT(self.start_XBt)
 
-                    if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
-                        sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+                        logger.info("New Leverage %s" % (new_leverage))   
+
+                        if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                            sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+                            total_sell_quantity += sell_quantity
+                            sell_quantity = 0
+                            order_count += 1
+                        else:
+                            break
 
                 buy_price_as_taker = break_even_price*(1-abs(self.instrument['makerFee'])-abs(self.instrument['takerFee']))
                 buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
@@ -351,18 +360,37 @@ class OrderManager:
                     buy_price = min(top_buy_price, math.toNearestFloor(break_even_price, self.instrument['tickSize']))
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
-            if position['currentQty']>0:
+            elif position['currentQty']>0:
                 avg_entry_price = math.toNearestCeil(position['avgEntryPrice'], self.instrument['tickSize'])
                 sell_orders.append({'price': max(top_sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
             
-        elif self.instrument['makerFee'] < 0 and self.instrument['fundingRate'] >= 0:
-            start_sell_price = max(top_sell_price, vwap)
-            start_sell_price = math.toNearestCeil(start_sell_price, self.instrument['tickSize'])
+        elif self.instrument['makerFee'] < 0 and self.instrument['fundingRate'] >= 0 and self.start_XBt > 0:
+            sell_quantity = 0
+            total_sell_quantity = 0
+            next_price = vwap/(1+settings.INTERVAL)
+            order_count = 0
 
-            for x in range(1):
-                sell_price = self.get_trade_price(start_sell_price, x)
-                sell_price = math.toNearestCeil(sell_price, self.instrument['tickSize'])
-                sell_orders.append({'price': sell_price, 'orderQty': settings.ORDER_START_SIZE, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+            while order_count < 10:
+                while True:
+                    sell_quantity += settings.ORDER_START_SIZE
+                    next_price *= 1+settings.INTERVAL
+
+                    if next_price >= top_sell_price and sell_quantity >= total_sell_quantity:
+                        break;
+
+                sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
+
+                new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/XBt_to_XBT(self.start_XBt)
+
+                logger.info("New Leverage %s" % (new_leverage))   
+
+                if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                    sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+                    total_sell_quantity += sell_quantity
+                    sell_quantity = 0
+                    order_count += 1
+                else:
+                    break
 
         return self.converge_orders(buy_orders, sell_orders)
 
