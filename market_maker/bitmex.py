@@ -91,6 +91,9 @@ class BitMEX(object):
         """
         return self.ws.recent_trades()
 
+    def trade_bin_5m(self):
+        return self.ws.trade_bin_5m()
+
     #
     # Authentication required methods
     #
@@ -173,8 +176,6 @@ class BitMEX(object):
         for order in orders:
             order['clOrdID'] = self.orderIDPrefix + base64.b64encode(uuid.uuid4().bytes).decode('utf8').rstrip('=\n')
             order['symbol'] = self.symbol
-            if self.postOnly:
-                order['execInst'] = 'ParticipateDoNotInitiate'
         return self._curl_bitmex(path='order/bulk', postdict={'orders': orders}, verb='POST')
 
     @authentication_required

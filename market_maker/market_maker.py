@@ -167,6 +167,9 @@ class ExchangeInterface:
             symbol = self.symbol
         return self.bitmex.position(symbol)
 
+    def get_trade_bin_5m(self):
+        return self.bitmex.trade_bin_5m()
+
     def get_ticker(self, symbol=None):
         if symbol is None:
             symbol = self.symbol
@@ -227,7 +230,6 @@ class OrderManager:
 
     def reset(self):
         self.exchange.cancel_all_orders()
-        self.sanity_check()
         self.print_status()
 
         # Create orders and converge.
@@ -242,7 +244,6 @@ class OrderManager:
         tickLog = self.exchange.get_instrument()['tickLog']
         self.start_XBt = margin["marginBalance"]
 
-        logger.info(position)
         logger.info("Current XBT Balance: %.6f" % XBt_to_XBT(self.start_XBt))
         logger.info("Current Contract Position: %d" % self.running_qty)
         if settings.CHECK_POSITION_LIMITS:
@@ -251,74 +252,10 @@ class OrderManager:
             logger.info("Avg Cost Price: %.*f" % (tickLog, float(position['avgCostPrice'])))
             logger.info("Avg Entry Price: %.*f" % (tickLog, float(position['avgEntryPrice'])))
             logger.info("Break Even Price: %.*f" % (tickLog, float(position['breakEvenPrice'])))
-            logger.info("VWAP: %s" % (self.instrument['vwap']))
             logger.info("Funding rate: %s" % (self.instrument['fundingRate']))
             logger.info("Indicative funding rate: %s" % (self.instrument['indicativeFundingRate']))
         logger.info("Contracts Traded This Run: %d" % (self.running_qty - self.starting_qty))
         logger.info("Total Contract Delta: %.4f XBT" % self.exchange.calc_delta()['spot'])
-
-    def get_ticker(self):
-        ticker = self.exchange.get_ticker()
-        tickLog = self.exchange.get_instrument()['tickLog']
-
-        # Set up our buy & sell positions as the smallest possible unit above and below the current spread
-        # and we'll work out from there. That way we always have the best price but we don't kill wide
-        # and potentially profitable spreads.
-        self.start_position_buy = ticker["buy"] + self.instrument['tickSize']
-        self.start_position_sell = ticker["sell"] - self.instrument['tickSize']
-
-        if self.start_position_buy >= ticker["sell"]:
-            self.start_position_buy = ticker["buy"]
-        
-        if self.start_position_sell <= ticker["buy"]:
-            self.start_position_sell = ticker["sell"]
-
-        # If we're maintaining spreads and we already have orders in place,
-        # make sure they're not ours. If they are, we need to adjust, otherwise we'll
-        # just work the orders inward until they collide.
-        if settings.MAINTAIN_SPREADS:
-            if ticker['buy'] == self.exchange.get_highest_buy()['price']:
-                self.start_position_buy = ticker["buy"]
-            if ticker['sell'] == self.exchange.get_lowest_sell()['price']:
-                self.start_position_sell = ticker["sell"]
-
-        # Back off if our spread is too small.
-        #if self.start_position_buy * (1.00 + settings.MIN_SPREAD) > self.start_position_sell:
-        #    self.start_position_buy *= (1.00 - (settings.MIN_SPREAD / 2))
-        #    self.start_position_sell *= (1.00 + (settings.MIN_SPREAD / 2))
-
-        # Midpoint, used for simpler order placement.
-        self.start_position_mid = ticker["mid"]
-        logger.info(
-            "%s Ticker: Buy: %.*f, Sell: %.*f" %
-            (self.instrument['symbol'], tickLog, ticker["buy"], tickLog, ticker["sell"])
-        )
-        logger.info('Start Positions: Buy: %.*f, Sell: %.*f, Mid: %.*f' %
-                    (tickLog, self.start_position_buy, tickLog, self.start_position_sell,
-                     tickLog, self.start_position_mid))
-        return ticker
-
-    def get_price_offset(self, index):
-        """Given an index (1, -1, 2, -2, etc.) return the price for that side of the book.
-           Negative is a buy, positive is a sell."""
-        # Maintain existing spreads for max profit
-        if settings.MAINTAIN_SPREADS:
-            start_position = self.start_position_buy if index < 0 else self.start_position_sell
-            # First positions (index 1, -1) should start right at start_position, others should branch from there
-            index = index + 1 if index < 0 else index - 1
-        else:
-            # Offset mode: ticker comes from a reference exchange and we define an offset.
-            start_position = self.start_position_buy if index < 0 else self.start_position_sell
-
-            # If we're attempting to sell, but our sell price is actually lower than the buy,
-            # move over to the sell side.
-            if index > 0 and start_position < self.start_position_buy:
-                start_position = self.start_position_sell
-            # Same for buys.
-            if index < 0 and start_position > self.start_position_sell:
-                start_position = self.start_position_buy
-
-        return math.toNearest(start_position * (1 + settings.INTERVAL) ** index, self.instrument['tickSize'])
 
     ###
     # Orders
@@ -337,14 +274,12 @@ class OrderManager:
 
     def get_trade_price(self, first_trade_price, trade_number):
         return first_trade_price*pow(1+settings.INTERVAL, trade_number)
-	
-    def get_trade_qty(self, last_trade_price, target_price):
-        return max(settings.ORDER_START_SIZE, floor((target_price/last_trade_price-1)/settings.INTERVAL)*settings.ORDER_START_SIZE)
 
     def place_orders(self):
         """Create order items for use in convergence."""
         ticker = self.exchange.get_ticker()
         position = self.exchange.get_position()
+        trade_bin_5m = self.exchange.get_trade_bin_5m();
 
         buy_orders = []
         sell_orders = []
@@ -358,11 +293,23 @@ class OrderManager:
         if top_sell_price <= ticker["buy"]:
             top_sell_price = ticker["sell"]
 
+        if len(trade_bin_5m) > 0:
+            vwap = trade_bin_5m[-1]['vwap']
+            logger.info("VWAP %s" %(trade_bin_5m[-1]))
+        else:
+            vwap = self.instrument['vwap']
+        
+        logger.info("VWAP: %s" % (vwap))    
+
         if position['currentQty'] != 0:
             current_qty = abs(position['currentQty'])
             trade_count = ceil(float(current_qty) / settings.ORDER_START_SIZE)
             
             logger.info("trade count %s" % (trade_count))
+
+            leverage = (current_qty/self.instrument['markPrice'])/XBt_to_XBT(self.start_XBt)
+
+            logger.info("Current Leverage %s" % (leverage))                
             
             if position['currentQty'] < 0:
                 break_even_price = min(position['avgEntryPrice'], position['breakEvenPrice'])
@@ -374,48 +321,6 @@ class OrderManager:
                 logger.info("first trade price %s" % (first_trade_price))
                 logger.info("last trade price %s" % (last_trade_price))
                 logger.info("next trade price %s" % (next_trade_price))
-                
-
-                buy_price = top_buy_price
-                buy_quantity = 0
-
-                buy_price2 = top_buy_price
-                buy_quantity2 = 0
-                
-                total_buy_qty = 0
-                buy_sum = 0
-
-                if trade_count < 0:
-                    buy_quantity = current_qty % settings.ORDER_START_SIZE
-                    buy_price = min(top_buy_price, math.toNearestFloor(last_trade_price/(1+settings.MIN_SPREAD), self.instrument['tickSize']))
-
-                    buy_sum+= buy_quantity*buy_price
-                    total_buy_qty+=buy_quantity
-                    
-                    if buy_quantity == 0:
-                        n=trade_count
-                    else:
-                        n=trade_count-1
-                        
-                        
-                    count = 0
-                    
-                    for x in range(n-1,0,-1):
-                        previous_trade_price = self.get_trade_price(first_trade_price, x)/(1+settings.MIN_SPREAD)
-
-                        if previous_trade_price >= buy_price:
-                            buy_quantity += settings.ORDER_START_SIZE
-                            total_buy_qty += settings.ORDER_START_SIZE
-                            buy_sum += settings.ORDER_START_SIZE*buy_price
-                        elif count < 50:
-                            buy_price2 = math.toNearestFloor(previous_trade_price, self.instrument['tickSize'])
-                            buy_quantity2 = settings.ORDER_START_SIZE
-                            total_buy_qty += buy_quantity2
-                            buy_sum+= buy_price2*buy_quantity2
-                            buy_orders.append({'price': buy_price2, 'orderQty': buy_quantity2, 'side': "Buy"})
-                            count+=1
-
-                    buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy"})
                 
                 if self.instrument['makerFee'] < 0 and self.instrument['fundingRate'] >= 0:
                     sell_quantity = -(current_qty % settings.ORDER_START_SIZE)
@@ -429,52 +334,38 @@ class OrderManager:
                     next_price = next_price/(1+settings.INTERVAL)
 
                     sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
-                    
-                    if sell_quantity > 0:
-                        sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell"})
 
-#                     for x in range(39):
-#                         sell_orders.append({'price': math.toNearestCeil(next_price, self.instrument['tickSize']), 'orderQty': settings.ORDER_START_SIZE, 'side': "Sell"})
-#                         next_price *= 1+settings.INTERVAL
+                    new_leverage = ((current_qty+sell_quantity)/self.instrument['markPrice'])/XBt_to_XBT(self.start_XBt)
 
-                if current_qty > total_buy_qty:
-                    break_even_price = (break_even_price*current_qty-buy_sum)/(current_qty-total_buy_qty)
-                    buy_price3 = min(top_buy_price, math.toNearestFloor(break_even_price/(1+settings.MIN_SPREAD), self.instrument['tickSize']))
-                    buy_quantity3 = current_qty - total_buy_qty
+                    logger.info("New Leverage %s" % (new_leverage))   
 
-                    buy_orders.append({'price': buy_price3, 'orderQty': buy_quantity3, 'side': "Buy"})
+                    if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                        sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+
+                buy_price_as_taker = break_even_price*(1-abs(self.instrument['makerFee'])-abs(self.instrument['takerFee']))
+                buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
+
+                if buy_price_as_taker >= ticker['sell']:
+                    buy_orders.append({'price': buy_price_as_taker, 'orderQty': current_qty, 'side': "Buy"})
+                else:
+                    buy_price = min(top_buy_price, math.toNearestFloor(break_even_price, self.instrument['tickSize']))
+                    buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
             if position['currentQty']>0:
                 avg_entry_price = math.toNearestCeil(position['avgEntryPrice'], self.instrument['tickSize'])
-                sell_orders.append({'price': max(top_sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell"})
+                sell_orders.append({'price': max(top_sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+            
         elif self.instrument['makerFee'] < 0 and self.instrument['fundingRate'] >= 0:
-            for x in range(1):
-                sell_price = self.get_trade_price(top_sell_price, x)
-                sell_price = math.toNearestCeil(sell_price, self.instrument['tickSize'])
-                sell_orders.append({'price': sell_price, 'orderQty': settings.ORDER_START_SIZE, 'side': "Sell"})
+            start_sell_price = max(top_sell_price, vwap)
+            start_sell_price = math.toNearestCeil(start_sell_price, self.instrument['tickSize'])
 
+            for x in range(1):
+                sell_price = self.get_trade_price(start_sell_price, x)
+                sell_price = math.toNearestCeil(sell_price, self.instrument['tickSize'])
+                sell_orders.append({'price': sell_price, 'orderQty': settings.ORDER_START_SIZE, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
 
         return self.converge_orders(buy_orders, sell_orders)
 
-    def prepare_order(self, index):
-        """Create an order object."""
-
-        if settings.RANDOM_ORDER_SIZE is True:
-            quantity = random.randint(settings.MIN_ORDER_SIZE, settings.MAX_ORDER_SIZE)
-        else:
-            quantity = settings.ORDER_START_SIZE + ((abs(index) - 1) * settings.ORDER_STEP_SIZE)
-
-        price = self.get_price_offset(index)
-
-        position = self.exchange.get_position()
-
-        if index < 0 and position['currentQty']<0 and float(position['avgEntryPrice']) >= price:
-            quantity = abs(position['currentQty']) + quantity
-        
-        if index > 0 and position['currentQty']>0 and float(position['avgEntryPrice']) <= price:
-            quantity = abs(position['currentQty']) + quantity        
-
-        return {'price': price, 'orderQty': quantity, 'side': "Buy" if index < 0 else "Sell"}
 
     def converge_orders(self, buy_orders, sell_orders):
         """Converge the orders we currently have in the book with what we want to be in the book.
@@ -575,40 +466,7 @@ class OrderManager:
         position = self.exchange.get_delta()
         return position >= settings.MAX_POSITION
 
-    ###
-    # Sanity
-    ##
-
-    def sanity_check(self):
-        """Perform checks before placing orders."""
-
-        # Check if OB is empty - if so, can't quote.
-        self.exchange.check_if_orderbook_empty()
-
-        # Ensure market is still open.
-        self.exchange.check_market_open()
-
-        # Get ticker, which sets price offsets and prints some debugging info.
-        ticker = self.get_ticker()
-
-        # Sanity check:
-        if self.get_price_offset(-1) >= ticker["sell"] or self.get_price_offset(1) <= ticker["buy"]:
-            logger.error("Buy: %s, Sell: %s" % (self.start_position_buy, self.start_position_sell))
-            logger.error("First buy position: %s\nBitMEX Best Ask: %s\nFirst sell position: %s\nBitMEX Best Bid: %s" %
-                         (self.get_price_offset(-1), ticker["sell"], self.get_price_offset(1), ticker["buy"]))
-            logger.error("Sanity check failed, exchange data is inconsistent")
-            self.exit()
-
-        # Messaging if the position limits are reached
-        if self.long_position_limit_exceeded():
-            logger.info("Long delta limit exceeded")
-            logger.info("Current Position: %.f, Maximum Position: %.f" %
-                        (self.exchange.get_delta(), settings.MAX_POSITION))
-
-        if self.short_position_limit_exceeded():
-            logger.info("Short delta limit exceeded")
-            logger.info("Current Position: %.f, Minimum Position: %.f" %
-                        (self.exchange.get_delta(), settings.MIN_POSITION))
+   
 
     ###
     # Running
@@ -650,7 +508,6 @@ class OrderManager:
                 logger.error("Realtime data connection unexpectedly closed, restarting.")
                 self.restart()
 
-            self.sanity_check()  # Ensures health of mm - several cut-out points here
             self.print_status()  # Print skew, delta, etc
             self.place_orders()  # Creates desired orders and converges to existing orders
 
