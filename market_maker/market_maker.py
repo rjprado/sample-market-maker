@@ -257,6 +257,7 @@ class OrderManager:
         logger.info("Contracts Traded This Run: %d" % (self.running_qty - self.starting_qty))
         logger.info("Total Contract Delta: %.4f XBT" % self.exchange.calc_delta()['spot'])
 
+
     ###
     # Orders
     ###
@@ -326,6 +327,7 @@ class OrderManager:
                     sell_quantity = -(current_qty % settings.ORDER_START_SIZE)
 
                     total_sell_quantity = current_qty
+                    total_delta = current_qty/position['avgEntryPrice']
                     next_price = last_trade_price
                     order_count = 0
 
@@ -334,7 +336,7 @@ class OrderManager:
                             sell_quantity += settings.ORDER_START_SIZE
                             next_price *= 1+settings.INTERVAL
 
-                            if next_price >= top_sell_price and sell_quantity >= total_sell_quantity:
+                            if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta:
                                 break;
 
                         sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
@@ -346,6 +348,7 @@ class OrderManager:
                         if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
                             sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
                             total_sell_quantity += sell_quantity
+                            total_delta += sell_quantity/sell_price
                             sell_quantity = 0
                             order_count += 1
                         else:
@@ -365,18 +368,23 @@ class OrderManager:
                 sell_orders.append({'price': max(top_sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
             
         elif self.instrument['makerFee'] < 0 and self.instrument['fundingRate'] >= 0 and self.start_XBt > 0:
-            sell_quantity = 0
+            sell_quantity = settings.ORDER_START_SIZE
             total_sell_quantity = 0
-            next_price = vwap/(1+settings.INTERVAL)
+            total_delta = 0
+            if vwap == None:
+                next_price = top_sell_price
+            else:
+                next_price = max(top_sell_price, vwap/(1+settings.INTERVAL))
             order_count = 0
 
             while order_count < 10:
-                while True:
-                    sell_quantity += settings.ORDER_START_SIZE
-                    next_price *= 1+settings.INTERVAL
-
-                    if next_price >= top_sell_price and sell_quantity >= total_sell_quantity:
-                        break;
+                if order_count > 0:
+                    while True:
+                        sell_quantity += settings.ORDER_START_SIZE
+                        next_price *= 1+settings.INTERVAL
+    
+                        if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta:
+                            break;
 
                 sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
 
@@ -387,6 +395,7 @@ class OrderManager:
                 if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
                     sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
                     total_sell_quantity += sell_quantity
+                    total_delta += sell_quantity/sell_price
                     sell_quantity = 0
                     order_count += 1
                 else:
