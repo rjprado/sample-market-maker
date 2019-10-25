@@ -261,6 +261,17 @@ class OrderManager:
     ###
     # Orders
     ###
+    
+    def calc_first_buy_price(self, avg_entry_price, trade_count):
+        suma = 0
+
+        for x in range(trade_count):
+            suma += pow(1-settings.INTERVAL, x)
+
+        return avg_entry_price*trade_count/suma
+
+    def get_buy_price(self, first_trade_price, trade_number):
+        return first_trade_price*pow(1-settings.INTERVAL, trade_number)    
 
     def calc_first_trade_price(self, avg_entry_price, trade_count):
         suma = 0
@@ -334,7 +345,7 @@ class OrderManager:
                     next_price = last_trade_price
                     order_count = 0
 
-                    while order_count < 10:
+                    while order_count < 1:
                         while True:
                             next_price *= 1+settings.INTERVAL
                             sell_quantity += ceil(start_order_size*next_price)
@@ -367,23 +378,71 @@ class OrderManager:
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
             elif position['currentQty']>0:
-                avg_entry_price = math.toNearestCeil(position['avgEntryPrice'], self.instrument['tickSize'])
-                sell_orders.append({'price': max(top_sell_price, avg_entry_price), 'orderQty': abs(position['currentQty']), 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
-            
-        elif funds > 0:
-            total_sell_quantity = 0
-            total_delta = 0
+                break_even_price = max(position['avgEntryPrice'], position['breakEvenPrice'])
+                trade_count = ceil((current_qty/break_even_price)/start_order_size)
+                
+                logger.info("trade count %s" % trade_count)
+                
+                first_trade_price = self.calc_first_buy_price(break_even_price, trade_count)
+                last_trade_price = self.get_buy_price(first_trade_price, trade_count-1)
+                next_trade_price = self.get_buy_price(first_trade_price, trade_count)
+                
+                logger.info("first buy price %s" % (first_trade_price))
+                logger.info("last buy price %s" % (last_trade_price))
+                logger.info("next buy price %s" % (next_trade_price))                
+                
+                if funds > 0:
+                    buy_quantity = 0
+                    total_buy_quantity = current_qty
+                    total_delta = current_qty/position['avgEntryPrice']
+                    next_price = last_buy_price
+                    order_count = 0
 
-            if vwap == None:
+                    while order_count < 1:
+                        while True:
+                            next_price *= 1-settings.INTERVAL
+                            sell_quantity += ceil(start_order_size*next_price)
+
+                            if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta:
+                                break;
+
+                        buy_price = min(top_buy_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
+
+                        new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
+
+                        logger.info("New Leverage %s" % (new_leverage))   
+
+                        if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                            buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
+                            total_buy_quantity += buy_quantity
+                            total_delta += buy_quantity/buy_price
+                            buy_quantity = 0
+                            order_count += 1
+                        else:
+                            break
+                
+                sell_price_as_taker = break_even_price*(1+abs(self.instrument['makerFee'])+abs(self.instrument['takerFee']))
+                sell_price_as_taker = math.toNearestCeil(sell_price_as_taker, self.instrument['tickSize'])
+
+                if sell_price_as_taker <= ticker['buy']:
+                    sell_orders.append({'price': sell_price_as_taker, 'orderQty': current_qty, 'side': "Sell"})
+                else:
+                    sell_price = max(top_sell_price, math.toNearestCeil(break_even_price, self.instrument['tickSize']))
+                    sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
+
+        elif funds > 0:
+            if vwap is None:
                 next_price = top_sell_price
             else:
                 next_price = max(top_sell_price, vwap/(1+settings.INTERVAL))
 
+            total_sell_quantity = 0
+            total_delta = 0
             sell_quantity = ceil(start_order_size*next_price)
 
             order_count = 0
 
-            while order_count < 10:
+            while order_count < 1:
                 if order_count > 0:
                     while True:
                         next_price *= 1+settings.INTERVAL
@@ -403,6 +462,41 @@ class OrderManager:
                     total_sell_quantity += sell_quantity
                     total_delta += sell_quantity/sell_price
                     sell_quantity = 0
+                    order_count += 1
+                else:
+                    break
+
+            if vwap is None:
+                next_price = top_buy_price
+            else:
+                next_price = min(top_buy_price, vwap/(1-settings.INTERVAL))
+
+            total_buy_quantity = 0
+            total_delta = 0
+            buy_quantity = ceil(start_order_size*next_price)
+
+            order_count = 0
+
+            while order_count < 1:
+                if order_count > 0:
+                    while True:
+                        next_price *= 1-settings.INTERVAL
+                        buy_quantity += ceil(start_order_size*next_price)
+    
+                        if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta:
+                            break;
+
+                buy_price = min(top_buy_price, math.toNearestFloor(next_price, self.instrument['tickSize']))
+
+                new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
+
+                logger.info("New Leverage %s" % (new_leverage))   
+
+                if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                    buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
+                    total_buy_quantity += buy_quantity
+                    total_delta += buy_quantity/buy_price
+                    buy_quantity = 0
                     order_count += 1
                 else:
                     break
