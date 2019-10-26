@@ -304,7 +304,6 @@ class OrderManager:
 
         if len(trade_bin_5m) > 0:
             vwap = trade_bin_5m[-1]['vwap']
-            logger.info("VWAP %s" %(trade_bin_5m[-1]))
         else:
             vwap = self.instrument['vwap']
         
@@ -395,13 +394,13 @@ class OrderManager:
                     buy_quantity = 0
                     total_buy_quantity = current_qty
                     total_delta = current_qty/position['avgEntryPrice']
-                    next_price = last_buy_price
+                    next_price = last_trade_price
                     order_count = 0
 
                     while order_count < 1:
                         while True:
                             next_price *= 1-settings.INTERVAL
-                            sell_quantity += ceil(start_order_size*next_price)
+                            buy_quantity += ceil(start_order_size*next_price)
 
                             if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta:
                                 break;
