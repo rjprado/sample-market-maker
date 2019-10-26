@@ -311,10 +311,12 @@ class OrderManager:
 
         funds = XBt_to_XBT(self.start_XBt)
 
-        start_order_size = settings.MAX_LEVERAGE*funds*settings.INTERVAL/settings.COVERAGE
+        start_order_short = settings.MAX_LEVERAGE*funds*settings.INTERVAL/settings.COVERAGE
+        start_order_long = settings.MAX_LEVERAGE_LONG*funds*settings.INTERVAL/settings.COVERAGE
 
-        logger.info("Start order size: %s:" % start_order_size)
+        logger.info("Start order short: %s:" % start_order_short)
 
+        logger.info("Start order long: %s:" % start_order_long)
 
         if position['currentQty'] != 0:
             current_qty = abs(position['currentQty'])
@@ -325,7 +327,7 @@ class OrderManager:
             
             if position['currentQty'] < 0:
                 break_even_price = min(position['avgEntryPrice'], position['breakEvenPrice'])
-                trade_count = ceil((current_qty/break_even_price)/start_order_size)
+                trade_count = ceil((current_qty/break_even_price)/start_order_short)
                 
                 logger.info("trade count %s" % trade_count)
                 
@@ -347,7 +349,7 @@ class OrderManager:
                     while order_count < 1:
                         while True:
                             next_price *= 1+settings.INTERVAL
-                            sell_quantity += ceil(start_order_size*next_price)
+                            sell_quantity += ceil(start_order_short*next_price)
 
                             if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta:
                                 break;
@@ -378,7 +380,7 @@ class OrderManager:
 
             elif position['currentQty']>0:
                 break_even_price = max(position['avgEntryPrice'], position['breakEvenPrice'])
-                trade_count = ceil((current_qty/break_even_price)/start_order_size)
+                trade_count = ceil((current_qty/break_even_price)/start_order_long)
                 
                 logger.info("trade count %s" % trade_count)
                 
@@ -400,7 +402,7 @@ class OrderManager:
                     while order_count < 1:
                         while True:
                             next_price *= 1-settings.INTERVAL
-                            buy_quantity += ceil(start_order_size*next_price)
+                            buy_quantity += ceil(start_order_long*next_price)
 
                             if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta:
                                 break;
@@ -411,7 +413,7 @@ class OrderManager:
 
                         logger.info("New Leverage %s" % (new_leverage))   
 
-                        if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                        if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG:
                             buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
                             total_buy_quantity += buy_quantity
                             total_delta += buy_quantity/buy_price
@@ -437,7 +439,7 @@ class OrderManager:
 
             total_sell_quantity = 0
             total_delta = 0
-            sell_quantity = ceil(start_order_size*next_price)
+            sell_quantity = ceil(start_order_short*next_price)
 
             order_count = 0
 
@@ -445,7 +447,7 @@ class OrderManager:
                 if order_count > 0:
                     while True:
                         next_price *= 1+settings.INTERVAL
-                        sell_quantity += ceil(start_order_size*next_price)
+                        sell_quantity += ceil(start_order_short*next_price)
     
                         if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta:
                             break;
@@ -472,7 +474,7 @@ class OrderManager:
 
             total_buy_quantity = 0
             total_delta = 0
-            buy_quantity = ceil(start_order_size*next_price)
+            buy_quantity = ceil(start_order_long*next_price)
 
             order_count = 0
 
@@ -480,7 +482,7 @@ class OrderManager:
                 if order_count > 0:
                     while True:
                         next_price *= 1-settings.INTERVAL
-                        buy_quantity += ceil(start_order_size*next_price)
+                        buy_quantity += ceil(start_order_long*next_price)
     
                         if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta:
                             break;
@@ -491,7 +493,7 @@ class OrderManager:
 
                 logger.info("New Leverage %s" % (new_leverage))   
 
-                if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG:
                     buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
                     total_buy_quantity += buy_quantity
                     total_delta += buy_quantity/buy_price
