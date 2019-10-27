@@ -11,6 +11,7 @@ import signal
 from market_maker import bitmex
 from market_maker.settings import settings
 from math import ceil, floor, pow
+from math import log as logn
 from market_maker.utils import log, constants, errors, math
 
 # Used for reloading the bot - saves modified times of key files
@@ -229,7 +230,7 @@ class OrderManager:
         self.reset()
 
     def reset(self):
-        self.exchange.cancel_all_orders()
+        #self.exchange.cancel_all_orders()
         self.print_status()
 
         # Create orders and converge.
@@ -244,19 +245,18 @@ class OrderManager:
         tickLog = self.exchange.get_instrument()['tickLog']
         self.start_XBt = margin["marginBalance"]
 
-        logger.info("Current XBT Balance: %.6f" % XBt_to_XBT(self.start_XBt))
+        logger.info("Current XBT Balance: %s" % self.start_XBt)
         logger.info("Current Contract Position: %d" % self.running_qty)
         if settings.CHECK_POSITION_LIMITS:
             logger.info("Position limits: %d/%d" % (settings.MIN_POSITION, settings.MAX_POSITION))
         if position['currentQty'] != 0:
-            logger.info("Avg Cost Price: %.*f" % (tickLog, float(position['avgCostPrice'])))
             logger.info("Avg Entry Price: %.*f" % (tickLog, float(position['avgEntryPrice'])))
             logger.info("Break Even Price: %.*f" % (tickLog, float(position['breakEvenPrice'])))
+            logger.info("Liquidation Price: %.*f" % (tickLog, float(position['liquidationPrice'])))
             logger.info("Funding rate: %s" % (self.instrument['fundingRate']))
-            logger.info("Indicative funding rate: %s" % (self.instrument['indicativeFundingRate']))
+            logger.info("Predicted Funding rate: %s" % (self.instrument['indicativeFundingRate']))
         logger.info("Contracts Traded This Run: %d" % (self.running_qty - self.starting_qty))
         logger.info("Total Contract Delta: %.4f XBT" % self.exchange.calc_delta()['spot'])
-
 
     ###
     # Orders
@@ -311,11 +311,13 @@ class OrderManager:
 
         funds = XBt_to_XBT(self.start_XBt)
 
-        start_order_short = settings.MAX_LEVERAGE*funds*settings.INTERVAL/settings.COVERAGE
-        start_order_long = settings.MAX_LEVERAGE_LONG*funds*settings.INTERVAL/settings.COVERAGE
+        max_buy_orders = ceil(logn(1+settings.COVERAGE)/logn(1+settings.INTERVAL))
+        start_order_long = ceil(settings.MAX_LEVERAGE_LONG*funds/max_buy_orders*1e8)/1e8
+
+        max_sell_orders = ceil(logn(1-settings.COVERAGE)/logn(1-settings.INTERVAL))
+        start_order_short = ceil(settings.MAX_LEVERAGE*funds/max_sell_orders*1e8)/1e8
 
         logger.info("Start order short: %s:" % start_order_short)
-
         logger.info("Start order long: %s:" % start_order_long)
 
         if position['currentQty'] != 0:
@@ -351,16 +353,14 @@ class OrderManager:
                             next_price *= 1+settings.INTERVAL
                             sell_quantity += ceil(start_order_short*next_price)
 
-                            if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta:
+                            if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*1.5:
                                 break;
 
                         sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
 
-                        new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds
+                        new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds  
 
-                        logger.info("New Leverage %s" % (new_leverage))   
-
-                        if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
+                        if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE and sell_price < position['liquidationPrice']:
                             sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
                             total_sell_quantity += sell_quantity
                             total_delta += sell_quantity/sell_price
@@ -404,16 +404,14 @@ class OrderManager:
                             next_price *= 1-settings.INTERVAL
                             buy_quantity += ceil(start_order_long*next_price)
 
-                            if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta:
+                            if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*1.5:
                                 break;
 
                         buy_price = min(top_buy_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
 
                         new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
 
-                        logger.info("New Leverage %s" % (new_leverage))   
-
-                        if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG:
+                        if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG and buy_price > position['liquidationPrice']:
                             buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
                             total_buy_quantity += buy_quantity
                             total_delta += buy_quantity/buy_price
@@ -443,20 +441,18 @@ class OrderManager:
 
             order_count = 0
 
-            while order_count < 1:
+            while order_count < settings.ORDER_PAIRS:
                 if order_count > 0:
                     while True:
                         next_price *= 1+settings.INTERVAL
                         sell_quantity += ceil(start_order_short*next_price)
     
-                        if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta:
+                        if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta*1.5:
                             break;
 
                 sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
 
                 new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds
-
-                logger.info("New Leverage %s" % (new_leverage))   
 
                 if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE:
                     sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
@@ -478,20 +474,18 @@ class OrderManager:
 
             order_count = 0
 
-            while order_count < 1:
+            while order_count < settings.ORDER_PAIRS:
                 if order_count > 0:
                     while True:
                         next_price *= 1-settings.INTERVAL
                         buy_quantity += ceil(start_order_long*next_price)
     
-                        if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta:
+                        if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta*1.5:
                             break;
 
                 buy_price = min(top_buy_price, math.toNearestFloor(next_price, self.instrument['tickSize']))
 
                 new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
-
-                logger.info("New Leverage %s" % (new_leverage))   
 
                 if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG:
                     buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
@@ -623,7 +617,7 @@ class OrderManager:
     def exit(self):
         logger.info("Shutting down. All open orders will be cancelled.")
         try:
-            self.exchange.cancel_all_orders()
+            #self.exchange.cancel_all_orders()
             self.exchange.bitmex.exit()
         except errors.AuthenticationError as e:
             logger.info("Was not authenticated; could not cancel orders.")
