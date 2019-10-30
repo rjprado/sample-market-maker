@@ -321,6 +321,7 @@ class OrderManager:
         logger.info("Start order short: %s:" % start_order_short)
         logger.info("Start order long: %s:" % start_order_long)
 
+        im_taker = False
 
         if position['currentQty'] != 0:
             current_qty = abs(position['currentQty'])
@@ -380,10 +381,12 @@ class OrderManager:
 
                 if buy_price_as_taker >= ticker['sell']:
                     close_short_at = buy_price_as_taker
+                    im_taker = True
                     buy_orders.append({'price': buy_price_as_taker, 'orderQty': current_qty, 'side': "Buy"})
                 else:
                     buy_price = min(top_buy_price, math.toNearestFloor(break_even_price*(1-profit), self.instrument['tickSize']))
                     close_short_at = buy_price
+                    im_taker = False
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
             elif position['currentQty']>0:
@@ -438,10 +441,12 @@ class OrderManager:
 
                 if sell_price_as_taker <= ticker['buy']:
                     close_long_at = sell_price_as_taker
+                    im_taker = True
                     sell_orders.append({'price': sell_price_as_taker, 'orderQty': current_qty, 'side': "Sell"})
                 else:
                     sell_price = max(top_sell_price, math.toNearestCeil(break_even_price*(1+profit), self.instrument['tickSize']))
                     close_long_at = sell_price
+                    im_taker = False
                     sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
         
         if funds > 0:
@@ -539,6 +544,17 @@ class OrderManager:
         buys_matched = 0
         sells_matched = 0
         existing_orders = self.exchange.get_orders()
+
+        for order in buy_orders:
+            if 'execInst' not in order:
+                to_create.append(order)
+
+        for order in sell_orders:
+            if 'execInst' not in order:
+                to_create.append(order)
+
+        buy_orders = [o for o in buy_orders if 'execInst' in o]
+        sell_orders = [o for o in sell_orders if 'execInst' in o]
 
         # Check all existing orders and match them up with what we want to place.
         # If there's an open one, we might be able to amend it to fit what we want.
