@@ -321,6 +321,7 @@ class OrderManager:
         logger.info("Start order short: %s:" % start_order_short)
         logger.info("Start order long: %s:" % start_order_long)
 
+
         if position['currentQty'] != 0:
             current_qty = abs(position['currentQty'])
 
@@ -353,7 +354,7 @@ class OrderManager:
                     next_price = last_trade_price
                     order_count = 0
 
-                    while order_count < 1:
+                    while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price *= 1+settings.INTERVAL
                             sell_quantity += ceil(start_order_short*next_price)
@@ -378,9 +379,11 @@ class OrderManager:
                 buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
 
                 if buy_price_as_taker >= ticker['sell']:
+                    close_short_at = buy_price_as_taker
                     buy_orders.append({'price': buy_price_as_taker, 'orderQty': current_qty, 'side': "Buy"})
                 else:
                     buy_price = min(top_buy_price, math.toNearestFloor(break_even_price*(1-profit), self.instrument['tickSize']))
+                    close_short_at = buy_price
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
             elif position['currentQty']>0:
@@ -409,7 +412,7 @@ class OrderManager:
                     next_price = last_trade_price
                     order_count = 0
 
-                    while order_count < 1:
+                    while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price *= 1-settings.INTERVAL
                             buy_quantity += ceil(start_order_long*next_price)
@@ -434,19 +437,26 @@ class OrderManager:
                 sell_price_as_taker = math.toNearestCeil(sell_price_as_taker, self.instrument['tickSize'])
 
                 if sell_price_as_taker <= ticker['buy']:
+                    close_long_at = sell_price_as_taker
                     sell_orders.append({'price': sell_price_as_taker, 'orderQty': current_qty, 'side': "Sell"})
                 else:
                     sell_price = max(top_sell_price, math.toNearestCeil(break_even_price*(1+profit), self.instrument['tickSize']))
+                    close_long_at = sell_price
                     sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
-
-        elif funds > 0:
+        
+        if funds > 0:
             
-            if self.instrument['fundingRate'] > 0 or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            #if self.instrument['fundingRate'] > 0 or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            if position['currentQty']>=0:
                 if vwap is None:
                     next_price = top_sell_price
                 else:
                     next_price = max(top_sell_price, vwap/(1+settings.INTERVAL))
-    
+
+                if position['currentQty']>0:
+                    next_price = max(next_price, close_long_at*(1+settings.INTERVAL))
+                    logger.info("close long at %s " % close_long_at)
+
                 total_sell_quantity = 0
                 total_delta = 0
                 sell_quantity = ceil(start_order_short*next_price)
@@ -475,11 +485,16 @@ class OrderManager:
                     else:
                         break
 
-            if self.instrument['fundingRate'] < 0 or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            #if self.instrument['fundingRate'] < 0 or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            if position['currentQty'] <= 0:
                 if vwap is None:
                     next_price = top_buy_price
                 else:
                     next_price = min(top_buy_price, vwap/(1-settings.INTERVAL))
+
+                if position['currentQty'] < 0:
+                    next_price = min(next_price, close_short_at*(1-settings.INTERVAL))
+                    logger.info("close short at %s " % close_short_at)
     
                 total_buy_quantity = 0
                 total_delta = 0
