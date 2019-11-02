@@ -46,7 +46,7 @@ class BitMEXWebsocket():
 
         # We can subscribe right in the connection querystring, so let's build that.
         # Subscribe to all pertinent endpoints
-        subscriptions = [sub + ':' + symbol for sub in ["quote", "trade", "tradeBin5m"]]
+        subscriptions = [sub + ':' + symbol for sub in ["quote", "trade", "tradeBin1h"]]
         subscriptions += ["instrument"]  # We want all of them
         if self.shouldAuth:
             subscriptions += [sub + ':' + symbol for sub in ["order", "execution"]]
@@ -128,7 +128,7 @@ class BitMEXWebsocket():
         return self.data['trade']
 
     def trade_bin_5m(self):
-        return self.data['tradeBin5m']
+        return self.data['tradeBin1h']
 
     #
     # Lifecycle methods
@@ -207,7 +207,7 @@ class BitMEXWebsocket():
     def __wait_for_symbol(self, symbol):
         '''On subscribe, this data will come down. Wait for it.'''
         count = 100
-        while not {'instrument', 'trade', 'quote', 'tradeBin5m'} <= set(self.data):
+        while not {'instrument', 'trade', 'quote', 'tradeBin1h'} <= set(self.data):
             sleep(0.1)
             count -= 1
             if count == 0:

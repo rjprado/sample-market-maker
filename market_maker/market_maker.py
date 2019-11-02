@@ -332,7 +332,7 @@ class OrderManager:
             
             if position['currentQty'] < 0:
                 break_even_price = position['avgEntryPrice']
-                trade_count = ceil((current_qty/break_even_price)/start_order_short)
+                trade_count = max(1, round((current_qty/break_even_price)/start_order_short))
                 
                 logger.info("trade count %s" % trade_count)
                 
@@ -358,7 +358,7 @@ class OrderManager:
                     while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price *= 1+settings.INTERVAL
-                            sell_quantity += ceil(start_order_short*next_price)
+                            sell_quantity += max(1, round(start_order_short*next_price))
 
                             if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
                                 break;
@@ -391,7 +391,7 @@ class OrderManager:
 
             elif position['currentQty']>0:
                 break_even_price = position['avgEntryPrice']
-                trade_count = ceil((current_qty/break_even_price)/start_order_long)
+                trade_count = max(1, round((current_qty/break_even_price)/start_order_long))
                 
                 logger.info("trade count %s" % trade_count)
                 
@@ -418,7 +418,7 @@ class OrderManager:
                     while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price *= 1-settings.INTERVAL
-                            buy_quantity += ceil(start_order_long*next_price)
+                            buy_quantity += max(1, round(start_order_long*next_price))
 
                             if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
                                 break;
@@ -449,14 +449,14 @@ class OrderManager:
                     im_taker = False
                     sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
         
-        if funds > 0:
+        elif funds > 0:
             
-            #if self.instrument['fundingRate'] > 0 or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
-            if position['currentQty']>=0:
+            if self.instrument['fundingRate'] > 0: #or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            #if position['currentQty']>=0:
                 if vwap is None:
                     next_price = top_sell_price
                 else:
-                    next_price = max(top_sell_price, vwap/(1+settings.INTERVAL))
+                    next_price = max(top_sell_price, vwap)
 
                 if position['currentQty']>0:
                     next_price = max(next_price, close_long_at*(1+settings.INTERVAL))
@@ -472,7 +472,7 @@ class OrderManager:
                     if order_count > 0:
                         while True:
                             next_price *= 1+settings.INTERVAL
-                            sell_quantity += ceil(start_order_short*next_price)
+                            sell_quantity += max(1, round(start_order_short*next_price))
         
                             if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
                                 break;
@@ -490,12 +490,13 @@ class OrderManager:
                     else:
                         break
 
-            #if self.instrument['fundingRate'] < 0 or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
-            if position['currentQty'] <= 0:
+            if False:
+            #if self.instrument['fundingRate'] < 0: #or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            #if position['currentQty'] <= 0:
                 if vwap is None:
                     next_price = top_buy_price
                 else:
-                    next_price = min(top_buy_price, vwap/(1-settings.INTERVAL))
+                    next_price = min(top_buy_price, vwap)
 
                 if position['currentQty'] < 0:
                     next_price = min(next_price, close_short_at*(1-settings.INTERVAL))
@@ -511,7 +512,7 @@ class OrderManager:
                     if order_count > 0:
                         while True:
                             next_price *= 1-settings.INTERVAL
-                            buy_quantity += ceil(start_order_long*next_price)
+                            buy_quantity += max(1, round(start_order_long*next_price))
         
                             if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
                                 break;
