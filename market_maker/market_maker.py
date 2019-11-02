@@ -556,6 +556,9 @@ class OrderManager:
         buy_orders = [o for o in buy_orders if 'execInst' in o]
         sell_orders = [o for o in sell_orders if 'execInst' in o]
 
+        #buy_orders.sort(key=lambda o : o['price'], reverse=True)
+        #sell_orders.sort(key=lambda o : o['price'])
+
         # Check all existing orders and match them up with what we want to place.
         # If there's an open one, we might be able to amend it to fit what we want.
         for order in existing_orders:
