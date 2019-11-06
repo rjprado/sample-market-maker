@@ -456,7 +456,7 @@ class OrderManager:
                 if vwap is None:
                     next_price = top_sell_price
                 else:
-                    next_price = max(top_sell_price, vwap)
+                    next_price = max(top_sell_price, vwap/(1+settings.INTERVAL))
 
                 if position['currentQty']>0:
                     next_price = max(next_price, close_long_at*(1+settings.INTERVAL))
