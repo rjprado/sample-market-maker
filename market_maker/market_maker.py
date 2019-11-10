@@ -170,6 +170,9 @@ class ExchangeInterface:
 
     def get_trade_bin_5m(self):
         return self.bitmex.trade_bin_5m()
+        
+    def get_trade_bin_1h(self):
+        return self.bitmex.trade_bin_1h()
 
     def get_ticker(self, symbol=None):
         if symbol is None:
@@ -289,6 +292,7 @@ class OrderManager:
         ticker = self.exchange.get_ticker()
         position = self.exchange.get_position()
         trade_bin_5m = self.exchange.get_trade_bin_5m();
+        trade_bin_1h = self.exchange.get_trade_bin_1h();
         margin = self.exchange.get_margin()
 
         buy_orders = []
@@ -307,6 +311,9 @@ class OrderManager:
             vwap = trade_bin_5m[-1]['vwap']
         else:
             vwap = self.instrument['vwap']
+            
+        if len(trade_bin_1h) > 0:
+            vwap = max(vwap, trade_bin_1h[-1]['vwap'])
         
         logger.info("VWAP: %s" % (vwap))    
 

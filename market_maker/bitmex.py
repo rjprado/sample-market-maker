@@ -94,6 +94,10 @@ class BitMEX(object):
     def trade_bin_5m(self):
         return self.ws.trade_bin_5m()
 
+    def trade_bin_1h(self):
+        return self.ws.trade_bin_1h()
+
+
     #
     # Authentication required methods
     #
