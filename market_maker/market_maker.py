@@ -256,8 +256,8 @@ class OrderManager:
             logger.info("Avg Entry Price: %.*f" % (tickLog, float(position['avgEntryPrice'])))
             logger.info("Break Even Price: %.*f" % (tickLog, float(position['breakEvenPrice'])))
             logger.info("Liquidation Price: %.*f" % (tickLog, float(position['liquidationPrice'])))
-            logger.info("Funding rate: %s" % (self.instrument['fundingRate']))
-            logger.info("Predicted Funding rate: %s" % (self.instrument['indicativeFundingRate']))
+        logger.info("Funding rate: %s" % (self.instrument['fundingRate']))
+        logger.info("Predicted Funding rate: %s" % (self.instrument['indicativeFundingRate']))
         logger.info("Contracts Traded This Run: %d" % (self.running_qty - self.starting_qty))
         logger.info("Total Contract Delta: %.4f XBT" % self.exchange.calc_delta()['spot'])
 
@@ -312,8 +312,8 @@ class OrderManager:
         else:
             vwap = self.instrument['vwap']
             
-        if len(trade_bin_1h) > 0:
-            vwap = max(vwap, trade_bin_1h[-1]['vwap'])
+#         if len(trade_bin_1h) > 0:
+#             vwap = max(vwap, trade_bin_1h[-1]['vwap'])
         
         logger.info("VWAP: %s" % (vwap))    
 
@@ -458,7 +458,7 @@ class OrderManager:
         
         elif funds > 0:
             
-            if self.instrument['fundingRate'] > 0 and self.instrument['indicativeFundingRate'] > 0: #or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            if self.instrument['fundingRate'] > 0: #and self.instrument['indicativeFundingRate'] > 0: #or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
             #if position['currentQty']>=0:
                 if vwap is None:
                     next_price = top_sell_price
