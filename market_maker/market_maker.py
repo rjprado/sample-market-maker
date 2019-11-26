@@ -458,7 +458,7 @@ class OrderManager:
         
         elif funds > 0:
             
-            if self.instrument['fundingRate'] > 0: #and self.instrument['indicativeFundingRate'] > 0: #or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            if start_order_short >= 0.0025 and self.instrument['fundingRate'] >= 0 and self.instrument['indicativeFundingRate'] > -abs(self.instrument['makerFee'])/2:
             #if position['currentQty']>=0:
                 if vwap is None:
                     next_price = top_sell_price
@@ -497,8 +497,7 @@ class OrderManager:
                     else:
                         break
 
-            if False:
-            #if self.instrument['fundingRate'] < 0 and self.instrument['indicativeFundingRate'] < 0: #or abs(self.instrument['fundingRate']) < abs(self.instrument['makerFee'])/2:
+            if start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0 and self.instrument['indicativeFundingRate'] < abs(self.instrument['makerFee'])/2:
             #if position['currentQty'] <= 0:
                 if vwap is None:
                     next_price = top_buy_price
