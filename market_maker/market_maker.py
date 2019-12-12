@@ -361,6 +361,7 @@ class OrderManager:
                     total_delta = current_qty/position['avgEntryPrice']
                     next_price = last_trade_price
                     order_count = 0
+                    first_price = None
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
@@ -380,6 +381,11 @@ class OrderManager:
                             total_delta += sell_quantity/sell_price
                             sell_quantity = 0
                             order_count += 1
+                            
+                            if first_price is None:
+                                first_price = sell_price
+                            elif (sell_price-first_price)/first_price > settings.RANGE:
+                                break
                         else:
                             break
 
@@ -421,6 +427,7 @@ class OrderManager:
                     total_delta = current_qty/position['avgEntryPrice']
                     next_price = last_trade_price
                     order_count = 0
+                    first_price = None
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
@@ -440,6 +447,11 @@ class OrderManager:
                             total_delta += buy_quantity/buy_price
                             buy_quantity = 0
                             order_count += 1
+                            
+                            if first_price is None:
+                                first_price = buy_price
+                            elif (first_price-buy_price)/first_price > settings.RANGE:
+                                break
                         else:
                             break
                 
@@ -456,9 +468,10 @@ class OrderManager:
                     im_taker = False
                     sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
         
-        elif funds > 0:
+        if funds > 0:
             
-            if start_order_short >= 0.0025 and self.instrument['indicativeFundingRate'] <= 0 and self.instrument['indicativeFundingRate'] >= -2*abs(self.instrument['makerFee']) and self.instrument['fundingRate'] >= -2*abs(self.instrument['makerFee']):
+            #if True:
+            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= -2*abs(self.instrument['makerFee']) and self.instrument['indicativeFundingRate'] >= -2*abs(self.instrument['makerFee']):
                 if vwap is None:
                     next_price = top_sell_price
                 else:
@@ -473,6 +486,7 @@ class OrderManager:
                 sell_quantity = ceil(start_order_short*next_price)
     
                 order_count = 0
+                first_price = None
     
                 while order_count < settings.ORDER_PAIRS:
                     if order_count > 0:
@@ -493,10 +507,16 @@ class OrderManager:
                         total_delta += sell_quantity/sell_price
                         sell_quantity = 0
                         order_count += 1
+                        
+                        if first_price is None:
+                            first_price = sell_price
+                        elif (sell_price-first_price)/first_price > settings.RANGE:
+                            break
+                            
                     else:
                         break
 
-            if start_order_long >= 0.0025 and self.instrument['indicativeFundingRate'] >= 0 and self.instrument['indicativeFundingRate'] <= 2*abs(self.instrument['makerFee']) and self.instrument['fundingRate'] <= 2*abs(self.instrument['makerFee']):
+            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 2*abs(self.instrument['makerFee']) and self.instrument['indicativeFundingRate'] <= 2*abs(self.instrument['makerFee']):
                 if vwap is None:
                     next_price = top_buy_price
                 else:
@@ -511,6 +531,7 @@ class OrderManager:
                 buy_quantity = ceil(start_order_long*next_price)
     
                 order_count = 0
+                first_price = None
     
                 while order_count < settings.ORDER_PAIRS:
                     if order_count > 0:
@@ -531,6 +552,12 @@ class OrderManager:
                         total_delta += buy_quantity/buy_price
                         buy_quantity = 0
                         order_count += 1
+                        
+                        if first_price is None:
+                            first_price = buy_price
+                        elif (first_price-buy_price)/first_price > settings.RANGE:
+                            break
+                            
                     else:
                         break
 
