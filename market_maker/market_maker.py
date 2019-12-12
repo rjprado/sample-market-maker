@@ -307,8 +307,8 @@ class OrderManager:
         if top_sell_price <= ticker["buy"]:
             top_sell_price = ticker["sell"]
 
-        if len(trade_bin_5m) > 0:
-            vwap = trade_bin_5m[-1]['vwap']
+        if len(trade_bin_1h) > 0:
+            vwap = trade_bin_1h[-1]['vwap']
         else:
             vwap = self.instrument['vwap']
             
