@@ -376,16 +376,15 @@ class OrderManager:
                         new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds  
 
                         if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_SHORT and sell_price < position['liquidationPrice']:
+                            if first_price is None:
+                                first_price = sell_price
+                            elif (sell_price-first_price)/first_price > settings.RANGE:
+                                break
                             sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
                             total_sell_quantity += sell_quantity
                             total_delta += sell_quantity/sell_price
                             sell_quantity = 0
                             order_count += 1
-                            
-                            if first_price is None:
-                                first_price = sell_price
-                            elif (sell_price-first_price)/first_price > settings.RANGE:
-                                break
                         else:
                             break
 
@@ -442,16 +441,16 @@ class OrderManager:
                         new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
 
                         if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG and buy_price > position['liquidationPrice']:
+                            if first_price is None:
+                                first_price = buy_price
+                            elif (first_price-buy_price)/first_price > settings.RANGE:
+                                break
                             buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
                             total_buy_quantity += buy_quantity
                             total_delta += buy_quantity/buy_price
                             buy_quantity = 0
                             order_count += 1
                             
-                            if first_price is None:
-                                first_price = buy_price
-                            elif (first_price-buy_price)/first_price > settings.RANGE:
-                                break
                         else:
                             break
                 
@@ -470,8 +469,9 @@ class OrderManager:
         
         if funds > 0:
             
-            #if True:
-            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= -abs(self.instrument['makerFee']) and self.instrument['indicativeFundingRate'] >= -abs(self.instrument['makerFee']):
+            if False:
+            #Should I go short?
+            #if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= -0.0001: # and self.instrument['indicativeFundingRate'] >= -abs(self.instrument['makerFee']):
                 if vwap is None:
                     next_price = top_sell_price
                 else:
@@ -502,21 +502,21 @@ class OrderManager:
                     new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds
     
                     if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_SHORT:
+                        if first_price is None:
+                            first_price = sell_price
+                        elif (sell_price-first_price)/first_price > settings.RANGE:
+                            break
                         sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
                         total_sell_quantity += sell_quantity
                         total_delta += sell_quantity/sell_price
                         sell_quantity = 0
                         order_count += 1
-                        
-                        if first_price is None:
-                            first_price = sell_price
-                        elif (sell_price-first_price)/first_price > settings.RANGE:
-                            break
-                            
                     else:
                         break
 
-            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= abs(self.instrument['makerFee']) and self.instrument['indicativeFundingRate'] <= abs(self.instrument['makerFee']):
+            if False:
+            # Should I go long?
+            #if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0.0001: #and self.instrument['indicativeFundingRate'] <= abs(self.instrument['makerFee']):
                 if vwap is None:
                     next_price = top_buy_price
                 else:
@@ -547,17 +547,15 @@ class OrderManager:
                     new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
     
                     if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG:
+                        if first_price is None:
+                            first_price = buy_price
+                        elif (first_price-buy_price)/first_price > settings.RANGE:
+                            break
                         buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
                         total_buy_quantity += buy_quantity
                         total_delta += buy_quantity/buy_price
                         buy_quantity = 0
                         order_count += 1
-                        
-                        if first_price is None:
-                            first_price = buy_price
-                        elif (first_price-buy_price)/first_price > settings.RANGE:
-                            break
-                            
                     else:
                         break
 
