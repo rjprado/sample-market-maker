@@ -307,10 +307,17 @@ class OrderManager:
         if top_sell_price <= ticker["buy"]:
             top_sell_price = ticker["sell"]
 
+        vwap = self.instrument['vwap']
+         
         if len(trade_bin_1h) > 0:
-            vwap = trade_bin_1h[-1]['vwap']
+            vwap1h = trade_bin_1h[-1]['vwap']
         else:
-            vwap = self.instrument['vwap']
+            vwap1h = vwap
+            
+        if len(trade_bin_5m) > 0:
+            vwap5m = trade_bin_5m[-1]['vwap']
+        else:
+            vwap5m = vwap1h
             
 #         if len(trade_bin_1h) > 0:
 #             vwap = max(vwap, trade_bin_1h[-1]['vwap'])
@@ -319,10 +326,10 @@ class OrderManager:
 
         funds = XBt_to_XBT(margin['walletBalance'])
 
-        max_buy_orders = ceil(logn(1+settings.COVERAGE)/logn(1+settings.INTERVAL))
+        max_buy_orders = ceil(logn(1+settings.COVERAGE_LONG)/logn(1+settings.INTERVAL))
         start_order_long = ceil(settings.MAX_LEVERAGE_LONG*funds/max_buy_orders*1e8)/1e8
 
-        max_sell_orders = ceil(logn(1-settings.COVERAGE)/logn(1-settings.INTERVAL))
+        max_sell_orders = ceil(logn(1-settings.COVERAGE_SHORT)/logn(1-settings.INTERVAL))
         start_order_short = ceil(settings.MAX_LEVERAGE_SHORT*funds/max_sell_orders*1e8)/1e8
 
         logger.info("Start order short: %s:" % start_order_short)
@@ -388,6 +395,7 @@ class OrderManager:
                         else:
                             break
 
+                break_even_price = min(break_even_price, position['breakEvenPrice']*(1-abs(self.instrument['makerFee'])))
                 buy_price_as_taker = break_even_price*(1-profit-abs(self.instrument['takerFee']))
                 buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
 
@@ -450,10 +458,10 @@ class OrderManager:
                             total_delta += buy_quantity/buy_price
                             buy_quantity = 0
                             order_count += 1
-                            
                         else:
                             break
                 
+                break_even_price = max(break_even_price, position['breakEvenPrice']*(1+abs(self.instrument['makerFee'])))
                 sell_price_as_taker = break_even_price*(1+profit+abs(self.instrument['takerFee']))
                 sell_price_as_taker = math.toNearestCeil(sell_price_as_taker, self.instrument['tickSize'])
 
@@ -469,13 +477,13 @@ class OrderManager:
         
         if funds > 0:
             
-            if False:
+            #if False:
             #Should I go short?
-            #if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= -0.0001: # and self.instrument['indicativeFundingRate'] >= -abs(self.instrument['makerFee']):
+            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= 0 and self.instrument['indicativeFundingRate'] >= 0:
                 if vwap is None:
                     next_price = top_sell_price
                 else:
-                    next_price = max(top_sell_price, vwap)
+                    next_price = max(top_sell_price, vwap5m)
 
                 if position['currentQty']>0:
                     next_price = max(next_price, close_long_at*(1+settings.INTERVAL))
@@ -506,6 +514,7 @@ class OrderManager:
                             first_price = sell_price
                         elif (sell_price-first_price)/first_price > settings.RANGE:
                             break
+                        
                         sell_orders.append({'price': sell_price, 'orderQty': sell_quantity, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
                         total_sell_quantity += sell_quantity
                         total_delta += sell_quantity/sell_price
@@ -514,13 +523,13 @@ class OrderManager:
                     else:
                         break
 
-            if False:
+            #if False:
             # Should I go long?
-            #if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0.0001: #and self.instrument['indicativeFundingRate'] <= abs(self.instrument['makerFee']):
+            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0 and self.instrument['indicativeFundingRate'] <= 0:
                 if vwap is None:
                     next_price = top_buy_price
                 else:
-                    next_price = min(top_buy_price, vwap)
+                    next_price = min(top_buy_price, vwap5m)
 
                 if position['currentQty'] < 0:
                     next_price = min(next_price, close_short_at*(1-settings.INTERVAL))
@@ -551,6 +560,7 @@ class OrderManager:
                             first_price = buy_price
                         elif (first_price-buy_price)/first_price > settings.RANGE:
                             break
+                            
                         buy_orders.append({'price': buy_price, 'orderQty': buy_quantity, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
                         total_buy_quantity += buy_quantity
                         total_delta += buy_quantity/buy_price
