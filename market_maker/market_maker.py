@@ -307,8 +307,8 @@ class OrderManager:
         if top_sell_price <= ticker["buy"]:
             top_sell_price = ticker["sell"]
 
-        if len(trade_bin_1h) > 0:
-            vwap = trade_bin_1h[-1]['vwap']
+        if len(trade_bin_5m) > 0:
+            vwap = trade_bin_5m[-1]['vwap']
         else:
             vwap = self.instrument['vwap']
             
@@ -471,7 +471,8 @@ class OrderManager:
         if funds > 0:
             
             #if True:
-            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= -2*abs(self.instrument['makerFee']) and self.instrument['indicativeFundingRate'] >= -2*abs(self.instrument['makerFee']):
+            # Should I go short
+            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] > -abs(self.instrument['takerFee']): #and self.instrument['indicativeFundingRate'] >= -2*abs(self.instrument['makerFee']):
                 if vwap is None:
                     next_price = top_sell_price
                 else:
@@ -516,7 +517,8 @@ class OrderManager:
                     else:
                         break
 
-            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 2*abs(self.instrument['makerFee']) and self.instrument['indicativeFundingRate'] <= 2*abs(self.instrument['makerFee']):
+            # Can I go long?
+            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] < abs(self.instrument['takerFee']):# and self.instrument['indicativeFundingRate'] <= 2*abs(self.instrument['makerFee']):
                 if vwap is None:
                     next_price = top_buy_price
                 else:
