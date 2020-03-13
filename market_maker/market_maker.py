@@ -167,6 +167,9 @@ class ExchangeInterface:
         if symbol is None:
             symbol = self.symbol
         return self.bitmex.position(symbol)
+        
+    def get_trade_bin_1m(self):
+        return self.bitmex.trade_bin_1m()
 
     def get_trade_bin_5m(self):
         return self.bitmex.trade_bin_5m()
@@ -291,6 +294,7 @@ class OrderManager:
         """Create order items for use in convergence."""
         ticker = self.exchange.get_ticker()
         position = self.exchange.get_position()
+        trade_bin_1m = self.exchange.get_trade_bin_1m();
         trade_bin_5m = self.exchange.get_trade_bin_5m();
         trade_bin_1h = self.exchange.get_trade_bin_1h();
         margin = self.exchange.get_margin()
@@ -319,10 +323,17 @@ class OrderManager:
         else:
             vwap5m = vwap1h
             
+        if len(trade_bin_1m) > 0:
+            vwap1m = trade_bin_1m[-1]['vwap']
+        else:
+            vwap1m = vwap5m
 #         if len(trade_bin_1h) > 0:
 #             vwap = max(vwap, trade_bin_1h[-1]['vwap'])
         
-        logger.info("VWAP: %s" % (vwap))    
+        logger.info("VWAP 24h: %s" % (vwap))
+        logger.info("VWAP 1h: %s" % (vwap1h))
+        logger.info("VWAP 5m: %s" % (vwap5m))
+        logger.info("VWAP 1m: %s" % (vwap1m))
 
         funds = XBt_to_XBT(margin['walletBalance'])
 
@@ -529,7 +540,7 @@ class OrderManager:
                 if vwap is None:
                     next_price = top_buy_price
                 else:
-                    next_price = min(top_buy_price, vwap5m)
+                    next_price = min(top_buy_price, vwap1m)
 
                 if position['currentQty'] < 0:
                     next_price = min(next_price, close_short_at*(1-settings.INTERVAL))

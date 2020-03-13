@@ -90,6 +90,9 @@ class BitMEX(object):
 
         """
         return self.ws.recent_trades()
+        
+    def trade_bin_1m(self):
+        return self.ws.trade_bin_1m()
 
     def trade_bin_5m(self):
         return self.ws.trade_bin_5m()
