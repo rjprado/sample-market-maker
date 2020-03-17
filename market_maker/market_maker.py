@@ -488,13 +488,13 @@ class OrderManager:
         
         if funds > 0:
             
-            #if False:
+#             if False:
             #Should I go short?
-            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= 0 and self.instrument['indicativeFundingRate'] >= 0:
+            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= 0:# and self.instrument['indicativeFundingRate'] >= 0:
                 if vwap is None:
                     next_price = top_sell_price
                 else:
-                    next_price = max(top_sell_price, vwap5m)
+                    next_price = max(top_sell_price, vwap1m)
 
                 if position['currentQty']>0:
                     next_price = max(next_price, close_long_at*(1+settings.INTERVAL))
@@ -534,9 +534,9 @@ class OrderManager:
                     else:
                         break
 
-            #if False:
-            # Should I go long?
-            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0 and self.instrument['indicativeFundingRate'] <= 0:
+#             if False:
+#             # Should I go long?
+            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0:# and self.instrument['indicativeFundingRate'] <= 0:
                 if vwap is None:
                     next_price = top_buy_price
                 else:
