@@ -365,7 +365,7 @@ class OrderManager:
                 last_trade_price = self.get_trade_price(first_trade_price, trade_count-1)
                 next_trade_price = self.get_trade_price(first_trade_price, trade_count)
                 spread = abs(first_trade_price-last_trade_price)/first_trade_price
-                profit = spread*settings.PROFIT
+                profit = settings.PROFIT
                 
                 logger.info("first trade price %s" % (first_trade_price))
                 logger.info("last trade price %s" % (last_trade_price))
@@ -431,7 +431,7 @@ class OrderManager:
                 next_trade_price = self.get_buy_price(first_trade_price, trade_count)
                 
                 spread = abs(first_trade_price-last_trade_price)/first_trade_price
-                profit = spread*settings.PROFIT
+                profit = settings.PROFIT
                 
                 logger.info("first buy price %s" % (first_trade_price))
                 logger.info("last buy price %s" % (last_trade_price))
