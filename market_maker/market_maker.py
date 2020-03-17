@@ -487,7 +487,6 @@ class OrderManager:
                     sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
         
         if funds > 0:
-            
 #             if False:
             #Should I go short?
             if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= 0:# and self.instrument['indicativeFundingRate'] >= 0:
