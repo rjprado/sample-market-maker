@@ -282,7 +282,7 @@ class OrderManager:
     def get_buy_price(self, first_trade_price, trade_number):
         return first_trade_price*pow(1-settings.INTERVAL, trade_number)    
 
-    def calc_first_trade_price(self, avg_entry_price, trade_count):
+    def calc_first_sell_price(self, avg_entry_price, trade_count):
         suma = 0
 
         for x in range(trade_count):
@@ -290,7 +290,7 @@ class OrderManager:
 
         return avg_entry_price*trade_count/suma
 
-    def get_trade_price(self, first_trade_price, trade_number):
+    def get_sell_price(self, first_trade_price, trade_number):
         return first_trade_price*pow(1+settings.INTERVAL, trade_number)
 
     def place_orders(self):
@@ -361,14 +361,13 @@ class OrderManager:
             logger.info("Current Leverage %s" % (leverage))                
             
             if position['currentQty'] < 0:
-                break_even_price = position['avgEntryPrice']
-                trade_count = max(1, round((current_qty/break_even_price)/start_order_short))
+                trade_count = max(1, round((current_qty/position['avgEntryPrice'])/start_order_short))
                 
                 logger.info("trade count %s" % trade_count)
                 
-                first_trade_price = self.calc_first_trade_price(break_even_price, trade_count)
-                last_trade_price = self.get_trade_price(first_trade_price, trade_count-1)
-                next_trade_price = self.get_trade_price(first_trade_price, trade_count)
+                first_trade_price = self.calc_first_sell_price(position['avgEntryPrice'], trade_count)
+                last_trade_price = self.get_sell_price(first_trade_price, trade_count-1)
+                next_trade_price = self.get_sell_price(first_trade_price, trade_count)
                 spread = abs(first_trade_price-last_trade_price)/first_trade_price
                 profit = settings.PROFIT
                 
@@ -411,7 +410,7 @@ class OrderManager:
                         else:
                             break
 
-                break_even_price = min(break_even_price, position['breakEvenPrice']*(1-abs(self.instrument['makerFee'])))
+                break_even_price = min(position['avgEntryPrice'], position['breakEvenPrice']*(1-abs(self.instrument['makerFee'])))
                 buy_price_as_taker = break_even_price*(1-profit-abs(self.instrument['takerFee']))
                 buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
 
@@ -426,12 +425,11 @@ class OrderManager:
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
             elif position['currentQty']>0:
-                break_even_price = position['avgEntryPrice']
-                trade_count = max(1, round((current_qty/break_even_price)/start_order_long))
+                trade_count = max(1, round((current_qty/position['avgEntryPrice'])/start_order_long))
                 
                 logger.info("trade count %s" % trade_count)
                 
-                first_trade_price = self.calc_first_buy_price(break_even_price, trade_count)
+                first_trade_price = self.calc_first_buy_price(position['avgEntryPrice'], trade_count)
                 last_trade_price = self.get_buy_price(first_trade_price, trade_count-1)
                 next_trade_price = self.get_buy_price(first_trade_price, trade_count)
                 
@@ -477,7 +475,7 @@ class OrderManager:
                         else:
                             break
                 
-                break_even_price = max(break_even_price, position['breakEvenPrice']*(1+abs(self.instrument['makerFee'])))
+                break_even_price = max(position['avgEntryPrice'], position['breakEvenPrice']*(1+abs(self.instrument['makerFee'])))
                 sell_price_as_taker = break_even_price*(1+profit+abs(self.instrument['takerFee']))
                 sell_price_as_taker = math.toNearestCeil(sell_price_as_taker, self.instrument['tickSize'])
 
