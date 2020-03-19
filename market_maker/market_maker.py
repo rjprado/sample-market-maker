@@ -275,23 +275,23 @@ class OrderManager:
         suma = 0
 
         for x in range(trade_count):
-            suma += pow(1-settings.INTERVAL, x)
+            suma += 1-x*settings.INTERVAL
 
         return avg_entry_price*trade_count/suma
 
     def get_buy_price(self, first_trade_price, trade_number):
-        return first_trade_price*pow(1-settings.INTERVAL, trade_number)    
+        return first_trade_price*(1-trade_number*settings.INTERVAL)    
 
     def calc_first_sell_price(self, avg_entry_price, trade_count):
         suma = 0
 
         for x in range(trade_count):
-            suma += pow(1+settings.INTERVAL, x)
+            suma += 1+x*settings.INTERVAL
 
         return avg_entry_price*trade_count/suma
 
     def get_sell_price(self, first_trade_price, trade_number):
-        return first_trade_price*pow(1+settings.INTERVAL, trade_number)
+        return first_trade_price*(1+trade_number*settings.INTERVAL)
 
     def place_orders(self):
         """Create order items for use in convergence."""
@@ -340,10 +340,10 @@ class OrderManager:
 
         funds = XBt_to_XBT(margin['walletBalance'])
 
-        max_buy_orders = ceil(logn(1-settings.COVERAGE_LONG)/logn(1-settings.INTERVAL))
+        max_buy_orders = ceil(settings.COVERAGE_LONG/settings.INTERVAL)
         start_order_long = ceil(settings.MAX_LEVERAGE_LONG*funds/max_buy_orders*1e8)/1e8
 
-        max_sell_orders = ceil(logn(1+settings.COVERAGE_SHORT)/logn(1+settings.INTERVAL))
+        max_sell_orders = ceil(settings.COVERAGE_SHORT/settings.INTERVAL)
         start_order_short = ceil(settings.MAX_LEVERAGE_SHORT*funds/max_sell_orders*1e8)/1e8
 
         logger.info("Max sell orders: %s:" % max_sell_orders)
