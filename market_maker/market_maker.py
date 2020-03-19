@@ -253,6 +253,9 @@ class OrderManager:
         
         logger.info("Current Wallet Balance: %s" % margin['walletBalance'])
         logger.info("Current Contract Position: %d" % self.running_qty)
+        logger.info("Mark price: %.4f" % self.instrument['markPrice'])
+        logger.info("Fair price: %.4f" % self.instrument['fairPrice'])
+        logger.info("Indicative settle price: %.4f" % self.instrument['indicativeSettlePrice'])
         if settings.CHECK_POSITION_LIMITS:
             logger.info("Position limits: %d/%d" % (settings.MIN_POSITION, settings.MAX_POSITION))
         if position['currentQty'] != 0:
@@ -337,13 +340,15 @@ class OrderManager:
 
         funds = XBt_to_XBT(margin['walletBalance'])
 
-        max_buy_orders = ceil(logn(1+settings.COVERAGE_LONG)/logn(1+settings.INTERVAL))
+        max_buy_orders = ceil(logn(1-settings.COVERAGE_LONG)/logn(1-settings.INTERVAL))
         start_order_long = ceil(settings.MAX_LEVERAGE_LONG*funds/max_buy_orders*1e8)/1e8
 
-        max_sell_orders = ceil(logn(1-settings.COVERAGE_SHORT)/logn(1-settings.INTERVAL))
+        max_sell_orders = ceil(logn(1+settings.COVERAGE_SHORT)/logn(1+settings.INTERVAL))
         start_order_short = ceil(settings.MAX_LEVERAGE_SHORT*funds/max_sell_orders*1e8)/1e8
 
+        logger.info("Max sell orders: %s:" % max_sell_orders)
         logger.info("Start order short: %s:" % start_order_short)
+        logger.info("Max buy orders: %s:" % max_buy_orders)
         logger.info("Start order long: %s:" % start_order_long)
 
         im_taker = False
