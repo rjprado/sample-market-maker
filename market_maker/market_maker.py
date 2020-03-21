@@ -361,9 +361,12 @@ class OrderManager:
             logger.info("Current Leverage %s" % (leverage))                
             
             if position['currentQty'] < 0:
-                trade_count = max(1, round((current_qty/position['avgEntryPrice'])/start_order_short))
+                qty = current_qty/position['avgEntryPrice']
+                remainder = qty % start_order_short
+                trade_count = ceil(qty/start_order_short)
                 
                 logger.info("trade count %s" % trade_count)
+                logger.info("remainder %s" % remainder)                
                 
                 first_trade_price = self.calc_first_sell_price(position['avgEntryPrice'], trade_count)
                 last_trade_price = self.get_sell_price(first_trade_price, trade_count-1)
@@ -384,6 +387,11 @@ class OrderManager:
                     order_count = 0
                     first_price = None
                     i = trade_count
+                    
+                    if start_order_short-remainder > 0.0025:
+                        i -= 1
+                    else:
+                        remainder = 0
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
@@ -395,7 +403,8 @@ class OrderManager:
                                 break;
 
                         sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
-
+                        sell_quantity -= round(remainder*sell_price)
+                        remainder = 0
                         new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds  
 
                         if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_SHORT and sell_price < position['liquidationPrice']:
@@ -426,9 +435,12 @@ class OrderManager:
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
 
             elif position['currentQty']>0:
-                trade_count = max(1, round((current_qty/position['avgEntryPrice'])/start_order_long))
+                qty = current_qty/position['avgEntryPrice']
+                remainder = qty % start_order_long
+                trade_count = ceil(qty/start_order_long)
                 
                 logger.info("trade count %s" % trade_count)
+                logger.info("remainder %s" % remainder)
                 
                 first_trade_price = self.calc_first_buy_price(position['avgEntryPrice'], trade_count)
                 last_trade_price = self.get_buy_price(first_trade_price, trade_count-1)
@@ -450,6 +462,11 @@ class OrderManager:
                     order_count = 0
                     first_price = None
                     i = trade_count
+                    
+                    if start_order_long-remainder > 0.0025:
+                        i -= 1
+                    else:
+                        remainder = 0
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
@@ -461,7 +478,8 @@ class OrderManager:
                                 break;
 
                         buy_price = min(top_buy_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
-
+                        buy_quantity -= round(remainder*buy_price)
+                        remainder = 0
                         new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
 
                         if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG and buy_price > position['liquidationPrice']:
@@ -509,13 +527,13 @@ class OrderManager:
                 sell_quantity = ceil(start_order_short*next_price)
     
                 order_count = 0
-                first_price = next_price
-                i = 0
+                first_price = None
+                i = 1
     
                 while order_count < settings.ORDER_PAIRS:
                     if order_count > 0:
                         while True:
-                            next_price = self.get_sell_price(first_price, i)
+                            next_price = self.get_sell_price(top_sell_price, i)
                             i += 1
                             sell_quantity += max(1, round(start_order_short*next_price))
         
@@ -557,13 +575,13 @@ class OrderManager:
                 buy_quantity = ceil(start_order_long*next_price)
     
                 order_count = 0
-                first_price = next_price
-                i = 0
+                first_price = None
+                i = 1
     
                 while order_count < settings.ORDER_PAIRS:
                     if order_count > 0:
                         while True:
-                            next_price = self.get_buy_price(first_price, i)
+                            next_price = self.get_buy_price(top_buy_price, i)
                             i += 1
                             buy_quantity += max(1, round(start_order_long*next_price))
         
