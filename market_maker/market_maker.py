@@ -381,13 +381,14 @@ class OrderManager:
                     sell_quantity = 0
                     total_sell_quantity = current_qty
                     total_delta = current_qty/position['avgEntryPrice']
-                    next_price = last_trade_price
                     order_count = 0
                     first_price = None
+                    i = trade_count
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
-                            next_price *= 1+settings.INTERVAL
+                            next_price = self.get_sell_price(first_trade_price, i)
+                            i += 1
                             sell_quantity += max(1, round(start_order_short*next_price))
 
                             if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
@@ -446,13 +447,14 @@ class OrderManager:
                     buy_quantity = 0
                     total_buy_quantity = current_qty
                     total_delta = current_qty/position['avgEntryPrice']
-                    next_price = last_trade_price
                     order_count = 0
                     first_price = None
+                    i = trade_count
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
-                            next_price *= 1-settings.INTERVAL
+                            next_price = self.get_buy_price(first_trade_price, i)
+                            i += 1
                             buy_quantity += max(1, round(start_order_long*next_price))
 
                             if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
@@ -507,12 +509,14 @@ class OrderManager:
                 sell_quantity = ceil(start_order_short*next_price)
     
                 order_count = 0
-                first_price = None
+                first_price = next_price
+                i = 0
     
                 while order_count < settings.ORDER_PAIRS:
                     if order_count > 0:
                         while True:
-                            next_price *= 1+settings.INTERVAL
+                            next_price = self.get_sell_price(first_price, i)
+                            i += 1
                             sell_quantity += max(1, round(start_order_short*next_price))
         
                             if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
@@ -553,12 +557,14 @@ class OrderManager:
                 buy_quantity = ceil(start_order_long*next_price)
     
                 order_count = 0
-                first_price = None
+                first_price = next_price
+                i = 0
     
                 while order_count < settings.ORDER_PAIRS:
                     if order_count > 0:
                         while True:
-                            next_price *= 1-settings.INTERVAL
+                            next_price = self.get_buy_price(first_price, i)
+                            i += 1
                             buy_quantity += max(1, round(start_order_long*next_price))
         
                             if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
