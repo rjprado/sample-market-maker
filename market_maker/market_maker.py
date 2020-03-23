@@ -318,25 +318,31 @@ class OrderManager:
          
         if len(trade_bin_1h) > 0:
             vwap1h = trade_bin_1h[-1]['vwap']
+            close1h = trade_bin_1h[-1]['close']
         else:
             vwap1h = vwap
+            close1h = open24h
             
         if len(trade_bin_5m) > 0:
             vwap5m = trade_bin_5m[-1]['vwap']
+            close5m = trade_bin_5m[-1]['close']
         else:
             vwap5m = vwap1h
+            close5m = open1h
             
         if len(trade_bin_1m) > 0:
             vwap1m = trade_bin_1m[-1]['vwap']
+            close1m = trade_bin_1m[-1]['close']
         else:
             vwap1m = vwap5m
+            close1m = close5m
 #         if len(trade_bin_1h) > 0:
 #             vwap = max(vwap, trade_bin_1h[-1]['vwap'])
         
-        logger.info("VWAP 24h: %s" % (vwap))
-        logger.info("VWAP 1h: %s" % (vwap1h))
-        logger.info("VWAP 5m: %s" % (vwap5m))
-        logger.info("VWAP 1m: %s" % (vwap1m))
+        logger.info("vwap 24h: %s" % (vwap))
+        logger.info("close 1h: %s" % (close1h))
+        logger.info("close 5m: %s" % (close5m))
+        logger.info("close 1m: %s" % (close1m))
 
         funds = XBt_to_XBT(margin['walletBalance'])
 
@@ -514,31 +520,30 @@ class OrderManager:
             #Should I go short?
             if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= 0:# and self.instrument['indicativeFundingRate'] >= 0:
                 if vwap is None:
-                    next_price = top_sell_price
+                    start_selling_at = top_sell_price
                 else:
-                    next_price = max(top_sell_price, vwap1m)
+                    start_selling_at = max(top_sell_price, close1m)
 
                 if position['currentQty']>0:
-                    next_price = max(next_price, close_long_at*(1+settings.INTERVAL))
+                    start_selling_at = max(start_selling_at, close_long_at*(1+settings.INTERVAL))
                     logger.info("close long at %s " % close_long_at)
 
                 total_sell_quantity = 0
                 total_delta = 0
-                sell_quantity = ceil(start_order_short*next_price)
+                sell_quantity = 0
     
                 order_count = 0
                 first_price = None
-                i = 1
+                i = 0
     
                 while order_count < settings.ORDER_PAIRS:
-                    if order_count > 0:
-                        while True:
-                            next_price = self.get_sell_price(top_sell_price, i)
-                            i += 1
-                            sell_quantity += max(1, round(start_order_short*next_price))
-        
-                            if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
-                                break;
+                    while True:
+                        next_price = self.get_sell_price(start_selling_at, i)
+                        i += 1
+                        sell_quantity += max(1, round(start_order_short*next_price))
+    
+                        if next_price > ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
+                            break;
     
                     sell_price = max(top_sell_price, math.toNearestCeil(next_price, self.instrument['tickSize']))
     
@@ -562,31 +567,30 @@ class OrderManager:
 #             # Should I go long?
             if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0:# and self.instrument['indicativeFundingRate'] <= 0:
                 if vwap is None:
-                    next_price = top_buy_price
+                    start_buying_at = top_buy_price
                 else:
-                    next_price = min(top_buy_price, vwap1m)
+                    start_buying_at = min(top_buy_price, close1m)
 
                 if position['currentQty'] < 0:
-                    next_price = min(next_price, close_short_at*(1-settings.INTERVAL))
+                    start_buying_at = min(start_buying_at, close_short_at*(1-settings.INTERVAL))
                     logger.info("close short at %s " % close_short_at)
     
                 total_buy_quantity = 0
                 total_delta = 0
-                buy_quantity = ceil(start_order_long*next_price)
     
                 order_count = 0
                 first_price = None
-                i = 1
+                buy_quantity = 0
+                i = 0
     
                 while order_count < settings.ORDER_PAIRS:
-                    if order_count > 0:
-                        while True:
-                            next_price = self.get_buy_price(top_buy_price, i)
-                            i += 1
-                            buy_quantity += max(1, round(start_order_long*next_price))
-        
-                            if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
-                                break;
+                    while True:
+                        next_price = self.get_buy_price(start_buying_at, i)
+                        i += 1
+                        buy_quantity += max(1, round(start_order_long*next_price))
+    
+                        if next_price < ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
+                            break;
     
                     buy_price = min(top_buy_price, math.toNearestFloor(next_price, self.instrument['tickSize']))
     
