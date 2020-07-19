@@ -351,18 +351,21 @@ class OrderManager:
             close1m = close5m
         
         logger.info("vwap 24h: %s" % (vwap))
+        logger.info("vwap 1h: %s" % (vwap1h))
         logger.info("close 1h: %s" % (close1h))
         logger.info("close 5m: %s" % (close5m))
         logger.info("close 1m: %s" % (close1m))
 
+        
+
         funds = XBt_to_XBT(margin['walletBalance'])
 
 
-        start_order_long = ceil(settings.LONG_START_SIZE*1e8)/1e8
+        start_order_long = ceil(settings.ORDER_START_SIZE*1e8)/1e8
         max_buy_orders = self.get_trade_count(start_order_long, settings.ORDER_STEP_SIZE, settings.MAX_LEVERAGE_LONG*funds)
         long_interval = settings.COVERAGE_LONG / max_buy_orders
 
-        start_order_short = ceil(settings.SHORT_START_SIZE*1e8)/1e8
+        start_order_short = ceil(settings.ORDER_START_SIZE*1e8)/1e8
         max_sell_orders = self.get_trade_count(start_order_short, settings.ORDER_STEP_SIZE, settings.MAX_LEVERAGE_SHORT*funds)
         short_interval = settings.COVERAGE_SHORT / max_sell_orders
 
@@ -384,7 +387,7 @@ class OrderManager:
                 qty = current_qty/position['avgEntryPrice']
                 trade_count = max(0,self.get_trade_count(start_order_short, settings.ORDER_STEP_SIZE, qty))
                 previous_qty = self.get_total_amount(start_order_short, settings.ORDER_STEP_SIZE, floor(trade_count))
-                remainder = previous_qty-qty
+                remainder = max(0, qty-previous_qty)
 
                 logger.info("qty %s" % qty)
                 logger.info("previous qty %s" % previous_qty)
@@ -413,31 +416,21 @@ class OrderManager:
                     total_delta = current_qty/position['avgEntryPrice']
                     order_count = 0
                     first_price = None
-
-                    if remainder > 0:
-                        i = trade_count
-                    else:
-                        i = trade_count+1
+                    i = trade_count+1
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price = self.get_sell_price(first_trade_price, i, short_interval)
                             next_price = math.toNearestCeil(next_price, self.instrument['tickSize'])
+                            sell_quantity += max(1, ceil(self.get_order_qty(start_order_short, i, settings.ORDER_STEP_SIZE) * next_price))
+                            i += 1
 
-                            if remainder > 0:
-                                sell_quantity = max(1, ceil(remainder * next_price))
-                                remainder = 0
-                                i += 1
-                                break
-                            else:
-                                sell_quantity += max(1, ceil(self.get_order_qty(start_order_short, i, settings.ORDER_STEP_SIZE) * next_price))
-                                i += 1
-                                if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
-                                    break;                            
-
+                            if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
+                                break;
 
                         sell_price = max(top_sell_price, next_price)
-
+                        sell_quantity -= ceil(remainder*sell_price)
+                        remainder = 0
                         new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds  
 
                         if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_SHORT and sell_price < position['liquidationPrice']:
@@ -471,7 +464,7 @@ class OrderManager:
                 qty = current_qty/position['avgEntryPrice']
                 trade_count = max(0,self.get_trade_count(start_order_long, settings.ORDER_STEP_SIZE, qty))
                 previous_qty = self.get_total_amount(start_order_long, settings.ORDER_STEP_SIZE, floor(trade_count))
-                remainder = previous_qty-qty
+                remainder = max(0, qty - previous_qty)
 
                 logger.info("trade count %s" % trade_count)
                 logger.info("remainder %s" % remainder)
@@ -498,30 +491,21 @@ class OrderManager:
                     total_delta = current_qty/position['avgEntryPrice']
                     order_count = 0
                     first_price = None
-
-                    if remainder > 0:
-                        i = trade_count
-                    else:
-                        i = trade_count+1
+                    i = trade_count+1
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price = self.get_buy_price(first_trade_price, i, long_interval)
                             next_price = math.toNearestFloor(next_price, self.instrument['tickSize'])
+                            buy_quantity += max(1, ceil(self.get_order_qty(start_order_long, i, settings.ORDER_STEP_SIZE)*next_price))
+                            i += 1
 
-                            if remainder > 0:
-                                buy_quantity = max(1, ceil(remainder*next_price))
-                                remainder = 0
-                                i += 1
-                                break
-                            else:
-                                buy_quantity += max(1, ceil(self.get_order_qty(start_order_long, i, settings.ORDER_STEP_SIZE)*next_price))
-                                i += 1
-                                if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
-                                    break;
+                            if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
+                                break;
 
                         buy_price = min(top_buy_price, next_price)
-
+                        buy_quantity -= ceil(remainder*buy_price)
+                        remainder = 0
                         new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
 
                         if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG and buy_price > position['liquidationPrice']:
@@ -558,7 +542,7 @@ class OrderManager:
                 if vwap is None:
                     start_selling_at = top_sell_price
                 else:
-                    start_selling_at = top_sell_price
+                    start_selling_at = max(vwap1h, top_sell_price)
 
                 if position['currentQty']>0:
                     start_selling_at = max(start_selling_at, close_long_at*(1+settings.INTERVAL))
@@ -606,7 +590,7 @@ class OrderManager:
                 if vwap is None:
                     start_buying_at = top_buy_price
                 else:
-                    start_buying_at = top_buy_price
+                    start_buying_at = min(vwap1h, top_buy_price)
 
                 if position['currentQty'] < 0:
                     start_buying_at = min(start_buying_at, close_short_at*(1-settings.INTERVAL))
