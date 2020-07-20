@@ -447,7 +447,7 @@ class OrderManager:
                             break
 
                 break_even_price = min(position['avgEntryPrice'], position['breakEvenPrice']*(1-abs(self.instrument['makerFee'])))
-                buy_price_as_taker = break_even_price*(1-profit-abs(self.instrument['takerFee']))
+                buy_price_as_taker = min(vwap1h, break_even_price*(1-profit-abs(self.instrument['takerFee'])))
                 buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
 
                 if buy_price_as_taker >= ticker['sell']:
@@ -455,7 +455,8 @@ class OrderManager:
                     im_taker = True
                     buy_orders.append({'price': buy_price_as_taker, 'orderQty': current_qty, 'side': "Buy"})
                 else:
-                    buy_price = min(top_buy_price, math.toNearestFloor(break_even_price*(1-profit), self.instrument['tickSize']))
+                    buy_price = min(vwap1h, top_buy_price, break_even_price*(1-profit))
+                    buy_price = math.toNearestFloor(buy_price, self.instrument['tickSize'])
                     close_short_at = buy_price
                     im_taker = False
                     buy_orders.append({'price': buy_price, 'orderQty': current_qty, 'side': "Buy", 'execInst': 'ParticipateDoNotInitiate'})
@@ -522,7 +523,7 @@ class OrderManager:
                             break
                 
                 break_even_price = max(position['avgEntryPrice'], position['breakEvenPrice']*(1+abs(self.instrument['makerFee'])))
-                sell_price_as_taker = break_even_price*(1+profit+abs(self.instrument['takerFee']))
+                sell_price_as_taker = max(vwap1h, break_even_price*(1+profit+abs(self.instrument['takerFee'])))
                 sell_price_as_taker = math.toNearestCeil(sell_price_as_taker, self.instrument['tickSize'])
 
                 if sell_price_as_taker <= ticker['buy']:
@@ -530,7 +531,8 @@ class OrderManager:
                     im_taker = True
                     sell_orders.append({'price': sell_price_as_taker, 'orderQty': current_qty, 'side': "Sell"})
                 else:
-                    sell_price = max(top_sell_price, math.toNearestCeil(break_even_price*(1+profit), self.instrument['tickSize']))
+                    sell_price = max(vwap1h, top_sell_price, break_even_price*(1+profit))
+                    sell_price = math.toNearestCeil(sell_price, self.instrument['tickSize'])
                     close_long_at = sell_price
                     im_taker = False
                     sell_orders.append({'price': sell_price, 'orderQty': current_qty, 'side': "Sell", 'execInst': 'ParticipateDoNotInitiate'})
