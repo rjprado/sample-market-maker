@@ -387,7 +387,8 @@ class OrderManager:
                 qty = current_qty/position['avgEntryPrice']
                 trade_count = max(0,self.get_trade_count(start_order_short, settings.ORDER_STEP_SIZE, qty))
                 previous_qty = self.get_total_amount(start_order_short, settings.ORDER_STEP_SIZE, floor(trade_count))
-                remainder = max(0, qty-previous_qty)
+                remainder = previous_qty-qty
+                #remainder = max(0, qty-previous_qty)
 
                 logger.info("qty %s" % qty)
                 logger.info("previous qty %s" % previous_qty)
@@ -416,21 +417,29 @@ class OrderManager:
                     total_delta = current_qty/position['avgEntryPrice']
                     order_count = 0
                     first_price = None
-                    i = trade_count+1
+                    
+                    if remainder > 0:
+                        i = trade_count
+                    else:
+                        i = trade_count+1
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price = self.get_sell_price(first_trade_price, i, short_interval)
                             next_price = math.toNearestCeil(next_price, self.instrument['tickSize'])
-                            sell_quantity += max(1, ceil(self.get_order_qty(start_order_short, i, settings.ORDER_STEP_SIZE) * next_price))
-                            i += 1
 
-                            if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
-                                break;
+                            if remainder > 0:
+                                sell_quantity = max(1, ceil(remainder * next_price))
+                                remainder = 0
+                                i += 1
+                                break
+                            else:
+                                sell_quantity += max(1, ceil(self.get_order_qty(start_order_short, i, settings.ORDER_STEP_SIZE) * next_price))
+                                i += 1
+                                if next_price >= ticker['buy'] and sell_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
+                                    break;
 
                         sell_price = max(top_sell_price, next_price)
-                        sell_quantity -= ceil(remainder*sell_price)
-                        remainder = 0
                         new_leverage = ((total_sell_quantity+sell_quantity)/self.instrument['markPrice'])/funds  
 
                         if sell_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_SHORT and sell_price < position['liquidationPrice']:
@@ -465,7 +474,8 @@ class OrderManager:
                 qty = current_qty/position['avgEntryPrice']
                 trade_count = max(0,self.get_trade_count(start_order_long, settings.ORDER_STEP_SIZE, qty))
                 previous_qty = self.get_total_amount(start_order_long, settings.ORDER_STEP_SIZE, floor(trade_count))
-                remainder = max(0, qty - previous_qty)
+                remainder = previous_qty-qty
+                #remainder = max(0, qty - previous_qty)
 
                 logger.info("trade count %s" % trade_count)
                 logger.info("remainder %s" % remainder)
@@ -492,21 +502,29 @@ class OrderManager:
                     total_delta = current_qty/position['avgEntryPrice']
                     order_count = 0
                     first_price = None
-                    i = trade_count+1
+                    
+                    if remainder > 0:
+                        i = trade_count
+                    else:
+                        i = trade_count+1
 
                     while order_count < settings.ORDER_PAIRS:
                         while True:
                             next_price = self.get_buy_price(first_trade_price, i, long_interval)
                             next_price = math.toNearestFloor(next_price, self.instrument['tickSize'])
-                            buy_quantity += max(1, ceil(self.get_order_qty(start_order_long, i, settings.ORDER_STEP_SIZE)*next_price))
-                            i += 1
 
-                            if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
-                                break;
+                            if remainder > 0:
+                                buy_quantity = max(1, ceil(remainder*next_price))
+                                remainder = 0
+                                i += 1
+                                break
+                            else:
+                                buy_quantity += max(1, ceil(self.get_order_qty(start_order_long, i, settings.ORDER_STEP_SIZE)*next_price))
+                                i += 1
+                                if next_price <= ticker['sell'] and buy_quantity/next_price >= total_delta*settings.RE_ENTRY_FACTOR:
+                                    break;
 
                         buy_price = min(top_buy_price, next_price)
-                        buy_quantity -= ceil(remainder*buy_price)
-                        remainder = 0
                         new_leverage = ((total_buy_quantity+buy_quantity)/self.instrument['markPrice'])/funds
 
                         if buy_quantity > 0 and new_leverage <= settings.MAX_LEVERAGE_LONG and buy_price > position['liquidationPrice']:
@@ -540,7 +558,7 @@ class OrderManager:
         if funds > 0:
 #             if False:
             #Should I go short?
-            if position['currentQty'] >= 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= -0.0025:# and self.instrument['indicativeFundingRate'] >= 0:
+            if position['currentQty'] >= 0 and self.instrument['makerFee'] < 0 and start_order_short >= 0.0025 and self.instrument['fundingRate'] >= self.instrument['makerFee']:# and self.instrument['indicativeFundingRate'] >= 0:
                 if vwap is None:
                     start_selling_at = top_sell_price
                 else:
@@ -588,7 +606,7 @@ class OrderManager:
 
 #             if False:
 #             # Should I go long?
-            if position['currentQty'] <= 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= 0.0025:# and self.instrument['indicativeFundingRate'] <= 0:
+            if position['currentQty'] <= 0 and self.instrument['makerFee'] < 0 and start_order_long >= 0.0025 and self.instrument['fundingRate'] <= abs(self.instrument['makerFee']):# and self.instrument['indicativeFundingRate'] <= 0:
                 if vwap is None:
                     start_buying_at = top_buy_price
                 else:
