@@ -361,11 +361,11 @@ class OrderManager:
         funds = XBt_to_XBT(margin['walletBalance'])
 
 
-        start_order_long = ceil(settings.ORDER_START_SIZE*1e8)/1e8
+        start_order_long = ceil(settings.LONG_START_SIZE*1e8)/1e8
         max_buy_orders = self.get_trade_count(start_order_long, settings.ORDER_STEP_SIZE, settings.MAX_LEVERAGE_LONG*funds)
         long_interval = settings.COVERAGE_LONG / max_buy_orders
 
-        start_order_short = ceil(settings.ORDER_START_SIZE*1e8)/1e8
+        start_order_short = ceil(settings.SHORT_START_SIZE*1e8)/1e8
         max_sell_orders = self.get_trade_count(start_order_short, settings.ORDER_STEP_SIZE, settings.MAX_LEVERAGE_SHORT*funds)
         short_interval = settings.COVERAGE_SHORT / max_sell_orders
 
@@ -447,7 +447,7 @@ class OrderManager:
                             break
 
                 break_even_price = min(position['avgEntryPrice'], position['breakEvenPrice']*(1-abs(self.instrument['makerFee'])))
-                buy_price_as_taker = min(vwap1h, break_even_price*(1-profit-abs(self.instrument['takerFee'])))
+                buy_price_as_taker = break_even_price*(1-profit-abs(self.instrument['takerFee']))
                 buy_price_as_taker = math.toNearestFloor(buy_price_as_taker, self.instrument['tickSize'])
 
                 if buy_price_as_taker >= ticker['sell']:
@@ -455,7 +455,7 @@ class OrderManager:
                     im_taker = True
                     buy_orders.append({'price': buy_price_as_taker, 'orderQty': current_qty, 'side': "Buy"})
                 else:
-                    buy_price = min(vwap1h, top_buy_price, break_even_price*(1-profit))
+                    buy_price = min(top_buy_price, break_even_price*(1-profit))
                     buy_price = math.toNearestFloor(buy_price, self.instrument['tickSize'])
                     close_short_at = buy_price
                     im_taker = False
@@ -523,7 +523,7 @@ class OrderManager:
                             break
                 
                 break_even_price = max(position['avgEntryPrice'], position['breakEvenPrice']*(1+abs(self.instrument['makerFee'])))
-                sell_price_as_taker = max(vwap1h, break_even_price*(1+profit+abs(self.instrument['takerFee'])))
+                sell_price_as_taker = break_even_price*(1+profit+abs(self.instrument['takerFee']))
                 sell_price_as_taker = math.toNearestCeil(sell_price_as_taker, self.instrument['tickSize'])
 
                 if sell_price_as_taker <= ticker['buy']:
@@ -531,7 +531,7 @@ class OrderManager:
                     im_taker = True
                     sell_orders.append({'price': sell_price_as_taker, 'orderQty': current_qty, 'side': "Sell"})
                 else:
-                    sell_price = max(vwap1h, top_sell_price, break_even_price*(1+profit))
+                    sell_price = max(top_sell_price, break_even_price*(1+profit))
                     sell_price = math.toNearestCeil(sell_price, self.instrument['tickSize'])
                     close_long_at = sell_price
                     im_taker = False
@@ -544,7 +544,7 @@ class OrderManager:
                 if vwap is None:
                     start_selling_at = top_sell_price
                 else:
-                    start_selling_at = max(vwap1h, top_sell_price)
+                    start_selling_at = top_sell_price
 
                 if position['currentQty']>0:
                     start_selling_at = max(start_selling_at, close_long_at*(1+settings.INTERVAL))
@@ -592,7 +592,7 @@ class OrderManager:
                 if vwap is None:
                     start_buying_at = top_buy_price
                 else:
-                    start_buying_at = min(vwap1h, top_buy_price)
+                    start_buying_at = top_buy_price
 
                 if position['currentQty'] < 0:
                     start_buying_at = min(start_buying_at, close_short_at*(1-settings.INTERVAL))
